@@ -14,11 +14,10 @@ project_root = pathlib.Path(__file__).resolve().parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from container_manager import ContainerManager
+from container_manager import ContainerManager  # noqa: E402
 
 
-IMAGE = "nginx:alpine"          # runs with no args
-C_PORT = "80/tcp"               # container port to expose (nginx)
+IMAGE = "nginx:alpine"          # imageId used in the new API
 MEM = "128m"                    # small mem limit for tests
 CPU = "0.25"                    # quarter CPU
 
@@ -52,7 +51,7 @@ def _load_app_module():
     else:
         # 2) search common candidates
         candidates = [
-            project_root / "app.py",                 # what we used in examples
+            project_root / "fast_api.py",
             project_root / "api.py",
             project_root / "app.py",
             project_root / "main.py",
@@ -100,177 +99,127 @@ def cleanup_managed_containers(dclient, app_module):
     Before & after each test, remove any containers we manage for IMAGE (by label).
     """
     label_key = app_module.manager.LABEL_KEY
+
     def _prune():
         for c in dclient.containers.list(all=True, filters={"label": f"{label_key}={IMAGE}"}):
             try:
                 c.remove(force=True)
             except Exception:
                 pass
+
     _prune()
     yield
     _prune()
 
 
-def test_create_container_real_docker(app_module, dclient):
+def test_start_container_creates_and_runs(app_module, dclient):
     client = TestClient(app_module.app)
 
+    # Start one container with resource hints (mapped by the server to docker args)
     payload = {
-        "image": IMAGE,
-        "min_replicas": 1,
-        "max_replicas": 3,
-        "env": {},
-        "ports": {C_PORT: 0},  # 0 => auto-assign host port
-        "resources": {"cpu": CPU, "memory": MEM, "status": "running"}
+        "count": 1,
+        "resources": {"cpu_limit": CPU, "memory_limit": MEM}
     }
-
-    # First call should create a new container
-    r = client.post("/start/container", json=payload)
+    r = client.post(f"/containers/{IMAGE}/start", json=payload)
     assert r.status_code == 200, r.text
     data = r.json()
-    assert data["ok"] is True
-    assert data["action"] == "created"
-    assert data["image"] == IMAGE
-    assert "container_id" in data
-    assert C_PORT in data["ports"]
-    assert data["ports"][C_PORT][0]["HostPort"].isdigit()
+    assert "started" in data and isinstance(data["started"], list) and len(data["started"]) == 1
+    cid = data["started"][0]
 
     # Verify with Docker that the container exists and is running
-    cid = data["container_id"]
     c = dclient.containers.get(cid)
     c.reload()
     assert c.status == "running"
 
 
-def test_idempotent_keeps_existing(app_module, dclient):
+def test_instances_lists_created_instance(app_module, dclient):
     client = TestClient(app_module.app)
 
-    payload = {
-        "image": IMAGE,
-        "min_replicas": 1,
-        "max_replicas": 3,
-        "env": {},
-        "ports": {C_PORT: 0},
-        "resources": {"cpu": CPU, "memory": MEM, "status": "running"}
-    }
+    # Create one
+    r = client.post(f"/containers/{IMAGE}/start", json={"count": 1})
+    assert r.status_code == 200
+    cid = r.json()["started"][0]
 
-    # Create once
-    r1 = client.post("/start/container", json=payload)
-    cid1 = r1.json()["container_id"]
-
-    # Call again -> should NOT create a duplicate
-    r2 = client.post("/start/container", json=payload)
+    # List instances for this image
+    r2 = client.get(f"/containers/{IMAGE}/instances")
     assert r2.status_code == 200, r2.text
-    data2 = r2.json()
-    assert data2["action"] == "kept-existing"
-    assert data2["container_id"] == cid1
+    data = r2.json()
+    assert "instances" in data and isinstance(data["instances"], list)
+    # find the one we just created
+    inst = next((i for i in data["instances"] if i.get("id") == cid), None)
+    assert inst is not None
+    # contract fields
+    assert set(inst.keys()) >= {"id", "status", "endpoint"}  # resources is optional
+    assert inst["status"] in ("running", "stopped")
+    assert isinstance(inst["endpoint"], str)
 
 
-def test_status_stopped_creates_then_stops(app_module, dclient):
+def test_health_endpoint_returns_fields(app_module, dclient):
+    client = TestClient(app_module.app)
+    # Ensure one running instance
+    r = client.post(f"/containers/{IMAGE}/start", json={"count": 1})
+    cid = r.json()["started"][0]
+
+    r2 = client.get(f"/containers/instances/{cid}/health")
+    assert r2.status_code == 200, r2.text
+    body = r2.json()
+
+    # Contract shape
+    assert set(body.keys()) >= {"cpu_usage", "memory_usage", "disk_usage", "status"}
+    assert isinstance(body["cpu_usage"], (int, float))
+    assert isinstance(body["memory_usage"], (int, float))
+    assert isinstance(body["disk_usage"], (int, float))
+    assert body["status"] in ("healthy", "warning", "critical", "stopped")
+    # errors is optional; if present must be a list
+    if "errors" in body:
+        assert isinstance(body["errors"], list)
+
+
+def test_stop_container_and_verify_docker_state(app_module, dclient):
     client = TestClient(app_module.app)
 
-    payload = {
-        "image": IMAGE,
-        "min_replicas": 1,
-        "max_replicas": 3,
-        "env": {},
-        "ports": {C_PORT: 0},
-        "resources": {"cpu": CPU, "memory": MEM, "status": "stopped"}
-    }
+    r = client.post(f"/containers/{IMAGE}/start", json={"count": 1})
+    cid = r.json()["started"][0]
 
-    r = client.post("/start/container", json=payload)
-    assert r.status_code == 200, r.text
-    data = r.json()
-    cid = data["container_id"]
+    # Stop via new API
+    r2 = client.post(f"/containers/{IMAGE}/stop", json={"instanceId": cid})
+    assert r2.status_code == 200, r2.text
+    assert r2.json().get("stopped") is True
 
     # Give Docker a moment to reflect the stopped state
     time.sleep(0.5)
     c = dclient.containers.get(cid)
     c.reload()
-    # stopped containers report as 'exited'
+    # stopped containers report as 'exited' (or rarely 'created')
     assert c.status in ("exited", "created")
 
 
-
-# ---------- test the delete container ----------
-
-
-def _create_nginx(dclient: docker.DockerClient, *, name=None, labels=None, expose_port=False):
+def test_delete_container_running(app_module, dclient):
     """
-    Small helper to create an nginx container for testing.
-    If expose_port=True, requests a random host port mapping for 80/tcp
-    to ensure the container is RUNNING.
-    """
-    ports = {"80/tcp": None} if expose_port else None
-    return dclient.containers.run(
-        "nginx:alpine",
-        detach=True,
-        name=name,
-        labels=labels or {},
-        ports=ports
-    )
-
-
-def test_delete_container_exited(app_module, dclient):
-    """
-    Create a container, stop it, and then delete it with force=false.
-    Expect 200 and that the container no longer exists.
-    """
-    client = TestClient(app_module.app)
-
-    labels = {ContainerManager.LABEL_KEY: "nginx:alpine"}
-    c = _create_nginx(dclient, labels=labels)
-    cname = c.name
-    try:
-        c.stop(timeout=5)
-
-        resp = client.delete(f"/containers/{cname}?force=false")
-        assert resp.status_code == 200, resp.text
-        data = resp.json()
-        assert data.get("deleted") is True
-
-        with pytest.raises(docker.errors.NotFound):
-            dclient.containers.get(cname)
-    finally:
-        # Cleanup in case of intermediate failure
-        try:
-            dclient.containers.get(cname).remove(force=True)
-        except docker.errors.NotFound:
-            pass
-
-
-def test_delete_container_running_force(app_module, dclient):
-    """
-    Create a RUNNING container and delete it with force=true.
+    Start a RUNNING container and delete it using the new DELETE body.
     Expect 200 and that the container is gone.
     """
     client = TestClient(app_module.app)
 
-    labels = {ContainerManager.LABEL_KEY: "nginx:alpine"}
-    c = _create_nginx(dclient, labels=labels, expose_port=True)
-    cname = c.name
-    try:
-        c.reload()
-        assert c.status in ("created", "restarting", "running")
+    # Start
+    r = client.post(f"/containers/{IMAGE}/start", json={"count": 1})
+    cid = r.json()["started"][0]
 
-        resp = client.delete(f"/containers/{cname}?force=true")
-        assert resp.status_code == 200, resp.text
-        data = resp.json()
-        assert data.get("deleted") is True
+    # Delete via new API (body carries instanceId). Starlette's .delete() has no json kwarg.
+    resp = client.request("DELETE", f"/containers/{IMAGE}", json={"instanceId": cid})
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data.get("deleted") is True
 
-        with pytest.raises(docker.errors.NotFound):
-            dclient.containers.get(cname)
-    finally:
-        try:
-            dclient.containers.get(cname).remove(force=True)
-        except docker.errors.NotFound:
-            pass
+    with pytest.raises(docker.errors.NotFound):
+        dclient.containers.get(cid)
 
 
-def test_delete_container_not_found(app_module):
+def test_delete_container_not_found_returns_404(app_module):
     """
-    Deleting a non-existent container should return 404.
+    Deleting a non-existent container should return 404 per the new API.
     """
     client = TestClient(app_module.app)
-    resp = client.delete("/containers/this-name-should-not-exist-xyz?force=true")
+    resp = client.request("DELETE", f"/containers/{IMAGE}", json={"instanceId": "this-id-should-not-exist-xyz"})
     assert resp.status_code == 404
     assert "not found" in resp.json().get("detail", "").lower()
