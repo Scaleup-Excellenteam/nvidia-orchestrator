@@ -52,7 +52,7 @@ def _load_app_module():
     else:
         # 2) search common candidates
         candidates = [
-            project_root / "fast_api.py",                 # what we used in examples
+            project_root / "app.py",                 # what we used in examples
             project_root / "api.py",
             project_root / "app.py",
             project_root / "main.py",
