@@ -21,6 +21,33 @@ def _to_nano_cpus(value) -> Optional[int]:
         pass
     return None
 
+def _calc_cpu_percent(stats: Dict[str, Any]) -> Optional[float]:
+    """Calculate CPU usage percentage from Docker stats"""
+    try:
+        cpu = stats.get("cpu_stats", {}) or {}
+        precpu = stats.get("precpu_stats", {}) or {}
+        cpu_total = (cpu.get("cpu_usage", {}) or {}).get("total_usage", 0) - \
+                    (precpu.get("cpu_usage", {}) or {}).get("total_usage", 0)
+        sys_total = (cpu.get("system_cpu_usage", 0) or 0) - (precpu.get("system_cpu_usage", 0) or 0)
+        ncpu = len((cpu.get("cpu_usage", {}) or {}).get("percpu_usage") or []) or 1
+        if sys_total > 0 and cpu_total >= 0:
+            return (cpu_total / sys_total) * ncpu * 100.0
+    except Exception:
+        pass
+    return None
+
+def _calc_mem_percent(stats: Dict[str, Any]) -> Optional[float]:
+    """Calculate memory usage percentage from Docker stats"""
+    try:
+        mem = stats.get("memory_stats", {}) or {}
+        usage = float(mem.get("usage", 0.0))
+        limit = float(mem.get("limit") or 0.0)
+        if limit > 0:
+            return (usage / limit) * 100.0
+    except Exception:
+        pass
+    return None
+
 
 def _normalize_run_resources(resources: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     resources = resources or {}
@@ -48,13 +75,43 @@ class ContainerManager:
 
     def __init__(self) -> None:
         logger.info("Initializing ContainerManager")
+        self.client = None
+        self._init_docker_client()
+        
+        self._store = PostgresStore()  # enabled=False if not reachable
+        if self._store.enabled:
+            logger.info("PostgreSQL store enabled")
+        else:
+            logger.warning("PostgreSQL store disabled - events will not be persisted")
+
+    def _init_docker_client(self, max_retries: int = 3) -> None:
+        """Initialize Docker client with retry logic"""
+        for attempt in range(max_retries):
+            try:
+                self.client = docker.from_env()
+                self.client.ping()  # Test connection
+                logger.info("Docker client initialized successfully")
+                return
+            except Exception as e:
+                logger.warning(f"Docker client initialization attempt {attempt + 1}/{max_retries} failed: {e}")
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                else:
+                    logger.error(f"Failed to initialize Docker client after {max_retries} attempts: {e}")
+                    raise RuntimeError(f"Cannot connect to Docker daemon: {e}")
+
+    def _ensure_docker_client(self) -> None:
+        """Ensure Docker client is available, reinitialize if needed"""
+        if self.client is None:
+            logger.warning("Docker client is None, attempting to reinitialize...")
+            self._init_docker_client()
+        
         try:
-            self.client = docker.from_env()
-            self.client.ping()  # Test connection
-            logger.info("Docker client initialized successfully")
+            self.client.ping()
         except Exception as e:
-            logger.error(f"Failed to initialize Docker client: {e}")
-            raise
+            logger.error(f"Docker client connection lost: {e}")
+            self._init_docker_client()
         
         self._store = PostgresStore()  # enabled=False if not reachable
         if self._store.enabled:
@@ -189,6 +246,9 @@ class ContainerManager:
         logger.info(f"Creating new container for image: {image}")
         logger.debug(f"Container config - env: {env}, ports: {ports}, resources: {resources}")
         
+        # Ensure Docker client is available
+        self._ensure_docker_client()
+        
         # Validate image exists or can be pulled
         try:
             self.client.images.get(image)
@@ -290,10 +350,12 @@ class ContainerManager:
         return self._run_new_container(image, env=env, ports=ports, resources=resources)
 
     def list_managed_containers(self) -> List[Dict[str, Any]]:
+        self._ensure_docker_client()
         items = self.client.containers.list(all=True, filters={"label": [self.LABEL_KEY]})
         return [self._summarize_container(c) for c in items]
 
     def list_instances_for_image(self, image: str) -> List[Dict[str, Any]]:
+        self._ensure_docker_client()
         return [self._summarize_container(c) for c in self._find_by_label_value(image)]
 
     def delete_container(self, name_or_id: str, *, force: bool = False) -> Dict[str, Any]:
@@ -462,3 +524,50 @@ class ContainerManager:
                 except Exception:
                     continue
         return updated
+
+    def get_system_resource_usage(self) -> Dict[str, Any]:
+        """Get current Docker container resource usage across all managed containers"""
+        try:
+            self._ensure_docker_client()
+            
+            # Get all managed containers
+            containers = self.list_managed_containers()
+            
+            total_cpu_percent = 0.0
+            total_memory_mb = 0.0
+            running_count = 0
+            
+            for container_info in containers:
+                if container_info.get("state") == "running":
+                    running_count += 1
+                    try:
+                        # Get container stats
+                        stats_res = self.container_stats(container_info["id"])
+                        if stats_res.get("ok"):
+                            stats = stats_res["stats"]
+                            cpu_p = _calc_cpu_percent(stats) or 0.0
+                            mem_p = _calc_mem_percent(stats) or 0.0
+                            
+                            total_cpu_percent += cpu_p
+                            # Estimate memory usage (this is approximate)
+                            total_memory_mb += (mem_p / 100.0) * 512  # Assume 512MB default
+                    except Exception as e:
+                        logger.warning(f"Failed to get stats for container {container_info['id']}: {e}")
+                        continue
+            
+            return {
+                "managed_containers": len(containers),
+                "running_containers": running_count,
+                "total_cpu_usage_percent": round(total_cpu_percent, 2),
+                "total_memory_usage_mb": round(total_memory_mb, 2),
+                "average_cpu_per_container": round(total_cpu_percent / max(running_count, 1), 2),
+                "average_memory_per_container_mb": round(total_memory_mb / max(running_count, 1), 2)
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to get system resource usage: {e}")
+            return {
+                "managed_containers": 0,
+                "running_containers": 0,
+                "error": str(e)
+            }

@@ -35,6 +35,10 @@ fi
 # Wait a bit more to ensure the database is fully initialized
 sleep 5
 
+# Start health monitor in background
+echo "Starting health monitor..."
+python health_monitor.py &
+
 # Start the application
 echo "Starting Orchestrator API..."
 exec uvicorn app:app --host 0.0.0.0 --port 8000
