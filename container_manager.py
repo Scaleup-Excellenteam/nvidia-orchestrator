@@ -49,6 +49,7 @@ class ContainerManager:
         self.client = docker.from_env()
         self._store = PostgresStore()  # enabled=False if not reachable
 
+
     # --- event helper ---
     def _record_event(self, payload: dict) -> None:
         try:
