@@ -1,46 +1,22 @@
-# ---------- Stage 1: builder ----------
-FROM python:3.11-slim AS base
-
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl && \
-    rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-COPY requirements.txt /app/requirements.txt
-
-RUN python -m pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
-
-# Use a lightweight Python base image
+# Use a stable base that has manylinux wheels available for deps
 FROM python:3.11-slim
 
-# Prevent Python from writing pyc files and force stdout flush
+# Avoid bytecode & ensure unbuffered logs
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    UVICORN_HOST=0.0.0.0 \
+    UVICORN_PORT=8000
 
-# Install system dependencies (certificates, etc.)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
-
-# Create app directory
 WORKDIR /app
 
-# Copy requirements first (for Docker caching)
-COPY requirements.txt .
+# Install Python deps first to leverage cache
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# Install Python dependencies
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# Copy source
+COPY app.py container_manager.py postgres_store.py mongodb.py health_monitor.py /app/
 
-# Copy the rest of the application code
-COPY . /app
+EXPOSE 8000
 
-# Expose API port
-EXPOSE 8088
-
-# Run FastAPI with uvicorn
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8088"]
+# Default entrypoint is the API; compose will override for health-monitor
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
