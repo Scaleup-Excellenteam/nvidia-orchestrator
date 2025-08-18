@@ -506,3 +506,75 @@ class ContainerManager:
                 except Exception:
                     continue
         return updated
+
+
+### this data for the billing .
+
+def _format_bytes(size: int) -> str:
+    """Convert bytes to human-readable string (GB/MB/KB)."""
+    if size is None:
+        return "0B"
+    # use 1024-based units
+    for unit in ["B", "KB", "MB", "GB", "TB"]:
+        if size < 1024:
+            return f"{size:.2f} {unit}"
+        size /= 1024
+    return f"{size:.2f} PB"
+
+def get_container_stats(self, container_id: str) -> Dict[str, Any]:
+        """Return a one-shot 'docker stats' summary for billing, human-readable."""
+        try:
+            c = self.client.containers.get(container_id)
+            s = c.stats(stream=False)
+
+            # ---- CPU % (כפי ש-docker מחשב) ----
+            cpu_total = s.get("cpu_stats", {}).get("cpu_usage", {}).get("total_usage", 0)
+            cpu_prev  = s.get("precpu_stats", {}).get("cpu_usage", {}).get("total_usage", 0)
+            sys_total = s.get("cpu_stats", {}).get("system_cpu_usage", 0) or 0
+            sys_prev  = s.get("precpu_stats", {}).get("system_cpu_usage", 0) or 0
+            cpu_delta = cpu_total - cpu_prev
+            sys_delta = sys_total - sys_prev
+            online = s.get("cpu_stats", {}).get("online_cpus")
+            if not online:
+                per_cpu = s.get("cpu_stats", {}).get("cpu_usage", {}).get("percpu_usage", []) or []
+                online = max(1, len(per_cpu))
+            cpu_percent = 0.0
+            if cpu_delta > 0 and sys_delta > 0:
+                cpu_percent = (cpu_delta / sys_delta) * online * 100.0
+
+            # ---- Memory ----
+            mem_usage_bytes = int(s.get("memory_stats", {}).get("usage", 0) or 0)
+            mem_limit_bytes = int(s.get("memory_stats", {}).get("limit", 0) or 0)
+            mem_usage_hr = _format_bytes(mem_usage_bytes)
+            mem_limit_hr = _format_bytes(mem_limit_bytes)
+
+            # ---- Network I/O (sum של כל הממשקים) ----
+            networks = s.get("networks", {}) or {}
+            rx_bytes = sum(int(v.get("rx_bytes", 0) or 0) for v in networks.values()) if isinstance(networks, dict) else 0
+            tx_bytes = sum(int(v.get("tx_bytes", 0) or 0) for v in networks.values()) if isinstance(networks, dict) else 0
+            net_io_hr = f"{_format_bytes(rx_bytes)} / {_format_bytes(tx_bytes)}"
+
+            # ---- Block I/O ----
+            blk = s.get("blkio_stats", {}) or {}
+            io_rec = blk.get("io_service_bytes_recursive") or []
+            read_bytes  = sum(int(x.get("value", 0) or 0) for x in io_rec if (x.get("op", "") or "").lower() == "read")
+            write_bytes = sum(int(x.get("value", 0) or 0) for x in io_rec if (x.get("op", "") or "").lower() == "write")
+            block_io_hr = f"{_format_bytes(read_bytes)} / {_format_bytes(write_bytes)}"
+
+            # ---- PIDs ----
+            pids = int(s.get("pids_stats", {}).get("current", 0) or 0)
+
+            return {
+                "id": c.id,
+                "name": c.name,
+                "cpu_percent": round(cpu_percent, 2),
+                "mem_usage": mem_usage_hr,     
+                "mem_limit": mem_limit_hr,    
+                "net_io": net_io_hr,           
+                "block_io": block_io_hr,       
+                "pids": pids,
+            }
+        except NotFound:
+            raise
+        except APIError:
+            raise

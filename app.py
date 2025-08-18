@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from typing import Dict, Optional, Any, List, Literal
-
+from docker.errors import NotFound, APIError
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -84,6 +84,16 @@ class DeleteResponse(BaseModel):
 class UpdateResourcesResponse(BaseModel):
     updated: List[str]
 
+
+class ContainerStats(BaseModel):
+    id: str
+    name: str
+    cpu_percent: float
+    mem_usage: str     
+    mem_limit: str    
+    net_io: str       
+    block_io: str      
+    pids: int
 
 # ---- Pydantic forward-ref safety for dynamic import (pytest loads via spec_from_file_location) ----
 for _m in (
@@ -296,3 +306,16 @@ def update_resources(imageId: str, body: PutResourcesBody):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app:app", host="0.0.0.0", port=8800, reload=True)
+
+
+
+@app.get("/order/{container_id}/container", response_model=ContainerStats)
+def get_billing_container_stats(container_id: str):
+    try:
+        return manager.get_container_stats(container_id)
+    except NotFound:
+        raise HTTPException(status_code=404, detail="Container not found")
+    except APIError as e:
+        raise HTTPException(status_code=502, detail=f"Docker API error: {getattr(e,'explanation', str(e))}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
