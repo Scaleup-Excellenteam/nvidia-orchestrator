@@ -4,6 +4,7 @@ import os, json
 from typing import Any, Dict, List, Optional
 import psycopg
 from psycopg.rows import tuple_row
+from logger import logger
 
 class PostgresStore:
     """
@@ -20,10 +21,15 @@ class PostgresStore:
             # local default, change if you like
             "postgresql://postgres:postgres@127.0.0.1:5432/orchestrator"
         )
+        logger.info(f"Initializing PostgresStore with DSN: {self.dsn.split('@')[1] if '@' in self.dsn else 'local'}")
+        
         self.enabled = False
         try:
             with psycopg.connect(self.dsn, autocommit=True) as conn:
+                logger.info("Connected to PostgreSQL successfully")
                 with conn.cursor(row_factory=tuple_row) as cur:
+                    logger.debug("Creating tables if they don't exist...")
+                    
                     cur.execute("""
                         CREATE TABLE IF NOT EXISTS desired_images (
                           image        TEXT PRIMARY KEY,
@@ -49,52 +55,30 @@ class PostgresStore:
                         )
                     """)
                     cur.execute("""
-                                CREATE TABLE IF NOT EXISTS health_snapshots
-                                (
-                                    id
-                    BIGSERIAL
-                                    PRIMARY
-                                    KEY,
-                                    image
-                                    TEXT
-                                    NOT
-                                    NULL,
-                                    container_id
-                                    TEXT
-                                    NOT
-                                    NULL,
-                                    name
-                                    TEXT,
-                                    host
-                                    TEXT,
-                                    cpu_usage
-                                    DOUBLE
-                                    PRECISION,
-                                    memory_usage
-                                    DOUBLE
-                                    PRECISION,
-                                    disk_usage
-                                    DOUBLE
-                                    PRECISION,
-                                    status
-                                    TEXT, -- healthy | warning | critical | stopped
-                                    ts
-                                    TIMESTAMPTZ
-                                    NOT
-                                    NULL
-                                    DEFAULT
-                                    now
-                                (
-                                )
-                                    )
-                                """)
+                        CREATE TABLE IF NOT EXISTS health_snapshots (
+                            id BIGSERIAL PRIMARY KEY,
+                            image TEXT NOT NULL,
+                            container_id TEXT NOT NULL,
+                            name TEXT,
+                            host TEXT,
+                            cpu_usage DOUBLE PRECISION,
+                            memory_usage DOUBLE PRECISION,
+                            disk_usage DOUBLE PRECISION,
+                            status TEXT, -- healthy | warning | critical | stopped
+                            ts TIMESTAMPTZ NOT NULL DEFAULT now()
+                        )
+                    """)
                     cur.execute("CREATE INDEX IF NOT EXISTS health_image_ts_idx ON health_snapshots (image, ts DESC)")
                     cur.execute(
                         "CREATE INDEX IF NOT EXISTS health_container_ts_idx ON health_snapshots (container_id, ts DESC)")
 
                     cur.execute("CREATE INDEX IF NOT EXISTS events_image_ts_idx ON events (image, ts DESC)")
+                    
+                    logger.info("Database schema initialized successfully")
             self.enabled = True
-        except Exception:
+            logger.info("PostgresStore enabled and ready")
+        except Exception as e:
+            logger.error(f"Failed to initialize PostgresStore: {e}")
             self.enabled = False
 
     # -------- desired_images --------
@@ -133,20 +117,28 @@ class PostgresStore:
 
     # -------- events --------
     def record_event(self, payload: Dict[str, Any]) -> None:
-        if not self.enabled: return
-        with psycopg.connect(self.dsn, autocommit=True) as conn, conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO events(image,container_id,name,host,ports,status,event,ts)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,now())
-            """, (
-                payload.get("image"),
-                payload.get("container_id"),
-                payload.get("name"),
-                payload.get("host"),
-                json.dumps(payload.get("ports") or {}),
-                payload.get("status"),
-                payload.get("event"),
-            ))
+        if not self.enabled: 
+            logger.warning("PostgresStore disabled, skipping event recording")
+            return
+        
+        try:
+            with psycopg.connect(self.dsn, autocommit=True) as conn, conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO events(image,container_id,name,host,ports,status,event,ts)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,now())
+                """, (
+                    payload.get("image"),
+                    payload.get("container_id"),
+                    payload.get("name"),
+                    payload.get("host"),
+                    json.dumps(payload.get("ports") or {}),
+                    payload.get("status"),
+                    payload.get("event"),
+                ))
+                logger.debug(f"Event recorded: {payload.get('event')} for {payload.get('container_id')}")
+        except Exception as e:
+            logger.error(f"Failed to record event: {e}")
+            logger.error(f"Event payload: {payload}")
 
     def list_events(self, image: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
         if not self.enabled: return []

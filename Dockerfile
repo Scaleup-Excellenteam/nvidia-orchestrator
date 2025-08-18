@@ -14,7 +14,7 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy source
-COPY app.py container_manager.py postgres_store.py mongodb.py health_monitor.py /app/
+COPY app.py container_manager.py postgres_store.py health_monitor.py /app/
 
 EXPOSE 8000
 

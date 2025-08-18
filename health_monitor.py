@@ -4,6 +4,7 @@ from typing import Dict, Any, List, Optional
 
 from container_manager import ContainerManager
 from postgres_store import PostgresStore
+from logger import logger
 
 INTERVAL_SEC = int(os.getenv("HEALTH_INTERVAL_SECONDS", "60"))
 RETENTION_DAYS = int(os.getenv("HEALTH_RETENTION_DAYS", "7"))
@@ -52,13 +53,17 @@ def _status(server_running: bool, cpu: Optional[float], mem: Optional[float]) ->
 
 def sample_once(manager: ContainerManager, store: PostgresStore) -> None:
     if not store.enabled:
-        logging.warning("PostgresStore disabled; skipping snapshot")
+        logger.warning("PostgresStore disabled; skipping snapshot")
         return
 
+    logger.debug("Starting health snapshot collection")
+    
     # get all containers managed by this orchestrator (label = managed-by)
     instances: List[Dict[str, Any]] = manager.list_managed_containers()
     host = socket.gethostname()
     disk = _disk_percent() or 0.0
+    
+    logger.info(f"Collecting health data for {len(instances)} containers on {host}")
 
     for s in instances:
         cid = s.get("id")
@@ -66,35 +71,51 @@ def sample_once(manager: ContainerManager, store: PostgresStore) -> None:
         image = s.get("image") or ""
         running = (s.get("state") == "running")
 
+        logger.debug(f"Checking health for container {cid} ({name}) - running: {running}")
+
         cpu = 0.0
         mem = 0.0
         if running:
-            res = manager.container_stats(cid)
-            if res.get("ok"):
-                stats = res["stats"] or {}
-                cpu = _cpu_percent(stats) or 0.0
-                mem = _mem_percent(stats) or 0.0
+            try:
+                res = manager.container_stats(cid)
+                if res.get("ok"):
+                    stats = res["stats"] or {}
+                    cpu = _cpu_percent(stats) or 0.0
+                    mem = _mem_percent(stats) or 0.0
+                    logger.debug(f"Container {cid}: CPU={cpu:.1f}%, MEM={mem:.1f}%")
+                else:
+                    logger.warning(f"Failed to get stats for {cid}: {res.get('error')}")
+            except Exception as e:
+                logger.error(f"Error getting stats for {cid}: {e}")
+        else:
+            logger.debug(f"Container {cid} not running, skipping stats collection")
 
         status = _status(running, cpu, mem)
+        logger.debug(f"Container {cid} health status: {status}")
 
         # write snapshot to Postgres
-        store.record_health_snapshot({
-            "image": image,
-            "container_id": cid,
-            "name": name,
-            "host": host,
-            "cpu_usage": cpu,
-            "memory_usage": mem,
-            "disk_usage": disk,
-            "status": status,
-        })
+        try:
+            store.record_health_snapshot({
+                "image": image,
+                "container_id": cid,
+                "name": name,
+                "host": host,
+                "cpu_usage": cpu,
+                "memory_usage": mem,
+                "disk_usage": disk,
+                "status": status,
+            })
+        except Exception as e:
+            logger.error(f"Failed to record health snapshot for {cid}: {e}")
+    
+    logger.info(f"Health snapshot collection completed for {len(instances)} containers")
 
 def run_forever() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    # Remove the basicConfig since we're using our custom logger
     manager = ContainerManager()
     store = PostgresStore()
 
-    logging.info("Health monitor starting: interval=%ss, retention_days=%s, store.enabled=%s",
+    logger.info("Health monitor starting: interval=%ss, retention_days=%s, store.enabled=%s",
                  INTERVAL_SEC, RETENTION_DAYS, store.enabled)
 
     while True:
@@ -103,12 +124,19 @@ def run_forever() -> None:
             sample_once(manager, store)
             # simple retention (optional)
             if RETENTION_DAYS > 0:
-                store.prune_old_health(RETENTION_DAYS)
+                try:
+                    pruned = store.prune_old_health(RETENTION_DAYS)
+                    if pruned > 0:
+                        logger.info(f"Pruned {pruned} old health records")
+                except Exception as e:
+                    logger.error(f"Failed to prune old health records: {e}")
         except Exception as e:
-            logging.exception("health_monitor loop error: %s", e)
+            logger.exception("Health monitor loop error: %s", e)
+        
         # sleep the remaining time in the minute
         elapsed = time.time() - t0
         to_sleep = max(1.0, INTERVAL_SEC - elapsed)
+        logger.debug(f"Health monitor loop completed in {elapsed:.2f}s, sleeping for {to_sleep:.2f}s")
         time.sleep(to_sleep)
 
 if __name__ == "__main__":

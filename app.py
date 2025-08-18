@@ -9,11 +9,13 @@ from pydantic import BaseModel, Field
 
 from container_manager import ContainerManager
 from postgres_store import PostgresStore  # <- Postgres only
+from logger import logger
 
 app = FastAPI(title="Team 3 Orchestrator API", version="1.0.0")
 manager = ContainerManager()
 _store = PostgresStore()
 
+logger.info("Orchestrator API starting up")
 
 # ------------------ Models ------------------
 class StartRequest(BaseModel):
@@ -94,8 +96,11 @@ def _record_event(payload: Dict[str, Any]) -> None:
     try:
         if _store and getattr(_store, "enabled", False):
             _store.record_event(payload)
-    except Exception:
-        pass
+            logger.debug(f"Event recorded: {payload.get('event')} for {payload.get('container_id')}")
+        else:
+            logger.warning("Event store not available, skipping event recording")
+    except Exception as e:
+        logger.error(f"Failed to record event: {e}")
 
 
 def _persist_desired(image: str, count: int, resources: Optional[Dict[str, Any]]) -> None:
@@ -108,38 +113,50 @@ def _persist_desired(image: str, count: int, resources: Optional[Dict[str, Any]]
                 "resources": resources or {},
             }
             _store.upsert_desired(image, doc)
-    except Exception:
-        pass
+            logger.debug(f"Desired state persisted for {image}: {count} replicas")
+        else:
+            logger.warning("Store not available, skipping desired state persistence")
+    except Exception as e:
+        logger.error(f"Failed to persist desired state for {image}: {e}")
 
 
 # ------------------ Routes expected by tests ------------------
 
 @app.post("/containers/{image}/start")
 def start_containers(image: str, body: StartRequest):
+    logger.info(f"Starting {body.count} container(s) for image: {image}")
     started: List[str] = []
-    for _ in range(body.count):
-        summary = manager.create_container(
-            image,
-            env=body.env,
-            ports=body.ports,
-            resources=body.resources,
-        )
-        started.append(summary["id"])
-        _record_event({
-            "image": image,
-            "container_id": summary["id"],
-            "name": summary.get("name"),
-            "host": socket.gethostname(),
-            "ports": summary.get("ports", {}),
-            "status": "running",
-            "event": "create",
-        })
+    for i in range(body.count):
+        try:
+            summary = manager.create_container(
+                image,
+                env=body.env,
+                ports=body.ports,
+                resources=body.resources,
+            )
+            started.append(summary["id"])
+            logger.info(f"Container {i+1}/{body.count} created: {summary['id']} ({summary.get('name', 'unnamed')})")
+            _record_event({
+                "image": image,
+                "container_id": summary["id"],
+                "name": summary.get("name"),
+                "host": socket.gethostname(),
+                "ports": summary.get("ports", {}),
+                "status": "running",
+                "event": "create",
+            })
+        except Exception as e:
+            logger.error(f"Failed to create container {i+1}/{body.count} for {image}: {e}")
+            raise HTTPException(status_code=500, detail=f"Container creation failed: {e}")
+    
     _persist_desired(image, body.count, body.resources)
+    logger.info(f"Successfully started {len(started)} container(s) for {image}")
     return {"started": started}
 
 
 @app.get("/containers/{image}/instances")
 def list_instances(image: str):
+    logger.info(f"Listing instances for image: {image}")
     instances_raw = manager.list_instances_for_image(image)
     instances = []
     for s in instances_raw:
@@ -150,16 +167,21 @@ def list_instances(image: str):
             "endpoint": _endpoint_from_summary(s),
             "resources": s.get("resources") or None,
         })
+    logger.info(f"Found {len(instances)} instances for {image}")
     return {"instances": instances}
 
 
 @app.get("/containers/instances/{instanceId}/health")
 def instance_health(instanceId: str):
+    logger.info(f"Checking health for instance: {instanceId}")
     res = manager.container_stats(instanceId)
     if not res.get("ok"):
+        error_msg = res.get("error", "unknown error")
+        logger.error(f"Health check failed for {instanceId}: {error_msg}")
         if res.get("error") == "not-found":
             raise HTTPException(status_code=404, detail="instance not found")
-        raise HTTPException(status_code=500, detail=str(res.get("error")))
+        raise HTTPException(status_code=500, detail=str(error_msg))
+    
     c = res["container"]
     stats = res["stats"] or {}
     server_alive = (getattr(c, "status", "") == "running")
@@ -167,16 +189,22 @@ def instance_health(instanceId: str):
     mem = _mem_percent_from_stats(stats) or 0.0
     disk = _disk_usage_percent() or 0.0
     status = _status_from_metrics(server_alive, cpu, mem)
+    
+    logger.info(f"Health check for {instanceId}: status={status}, cpu={cpu:.1f}%, mem={mem:.1f}%, disk={disk:.1f}%")
     return {"cpu_usage": cpu, "memory_usage": mem, "disk_usage": disk, "status": status}
 
 
 @app.post("/containers/{image}/stop")
 def stop_container(image: str, body: StopRequest):
+    logger.info(f"Stopping container {body.instanceId} for image: {image}")
     out = manager.stop_container(body.instanceId)
     if not out.get("ok"):
+        error_msg = out.get("error", "unknown error")
+        logger.error(f"Failed to stop container {body.instanceId}: {error_msg}")
         if out.get("error") == "not-found":
             raise HTTPException(status_code=404, detail="instance not found")
-        raise HTTPException(status_code=500, detail=str(out.get("error")))
+        raise HTTPException(status_code=500, detail=str(error_msg))
+    
     _record_event({
         "image": image,
         "container_id": body.instanceId,
@@ -184,16 +212,21 @@ def stop_container(image: str, body: StopRequest):
         "status": "stopped",
         "event": "stop",
     })
+    logger.info(f"Successfully stopped container {body.instanceId}")
     return {"stopped": True}
 
 
 @app.delete("/containers/{image}")
 def delete_container(image: str, body: DeleteRequest):
+    logger.info(f"Deleting container {body.instanceId} for image: {image}")
     out = manager.delete_container(body.instanceId, force=True)
     if not out.get("ok"):
+        error_msg = out.get("error", "unknown error")
+        logger.error(f"Failed to delete container {body.instanceId}: {error_msg}")
         if out.get("error") == "not-found":
             raise HTTPException(status_code=404, detail="not found")
-        raise HTTPException(status_code=500, detail=str(out.get("error")))
+        raise HTTPException(status_code=500, detail=str(error_msg))
+    
     _record_event({
         "image": image,
         "container_id": body.instanceId,
@@ -201,6 +234,7 @@ def delete_container(image: str, body: DeleteRequest):
         "status": "removed",
         "event": "remove",
     })
+    logger.info(f"Successfully deleted container {body.instanceId}")
     return {"deleted": True}
 
 

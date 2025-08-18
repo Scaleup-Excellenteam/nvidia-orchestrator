@@ -6,6 +6,7 @@ from docker.models.containers import Container
 from docker.errors import NotFound, APIError
 
 from postgres_store import PostgresStore  # <- Postgres only
+from logger import logger
 
 
 
@@ -46,8 +47,20 @@ class ContainerManager:
     LABEL_KEY = "managed-by"
 
     def __init__(self) -> None:
-        self.client = docker.from_env()
+        logger.info("Initializing ContainerManager")
+        try:
+            self.client = docker.from_env()
+            self.client.ping()  # Test connection
+            logger.info("Docker client initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize Docker client: {e}")
+            raise
+        
         self._store = PostgresStore()  # enabled=False if not reachable
+        if self._store.enabled:
+            logger.info("PostgreSQL store enabled")
+        else:
+            logger.warning("PostgreSQL store disabled - events will not be persisted")
 
 
     # --- event helper ---
@@ -173,31 +186,48 @@ class ContainerManager:
         ports: Optional[Dict[str, Optional[int]]] = None,
         resources: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
+        logger.info(f"Creating new container for image: {image}")
+        logger.debug(f"Container config - env: {env}, ports: {ports}, resources: {resources}")
+        
         port_map = self._normalize_ports(ports)
         if not port_map:
             port_map = self._detect_exposed_ports(image)
+            logger.debug(f"Detected exposed ports: {port_map}")
+        
         run_kwargs = _normalize_run_resources(resources)
-        container = self.client.containers.run(
-            image=image,
-            detach=True,
-            environment=env or None,
-            ports=port_map or None,
-            labels={self.LABEL_KEY: image},
-            restart_policy={"Name": "unless-stopped"},
-            **run_kwargs,
-        )
-        time.sleep(0.2)
-        summary = self._summarize_container(container)
-        self._record_event({
-            "image": image,
-            "container_id": summary["id"],
-            "name": summary.get("name"),
-            "host": socket.gethostname(),
-            "ports": summary.get("ports", {}),
-            "status": "running",
-            "event": "create",
-        })
-        return summary
+        logger.debug(f"Run kwargs: {run_kwargs}")
+        
+        try:
+            container = self.client.containers.run(
+                image=image,
+                detach=True,
+                environment=env or None,
+                ports=port_map or None,
+                labels={self.LABEL_KEY: image},
+                restart_policy={"Name": "unless-stopped"},
+                **run_kwargs,
+            )
+            logger.info(f"Container created: {container.id} ({container.name})")
+            
+            time.sleep(0.2)
+            summary = self._summarize_container(container)
+            
+            self._record_event({
+                "image": image,
+                "container_id": summary["id"],
+                "name": summary.get("name"),
+                "host": socket.gethostname(),
+                "ports": summary.get("ports", {}),
+                "status": "running",
+                "event": "create",
+            })
+            
+            logger.info(f"Container {container.id} ready with ports: {summary.get('host_ports', {})}")
+            return summary
+            
+        except Exception as e:
+            logger.error(f"Failed to create container for {image}: {e}")
+            raise
 
     # -------- public API --------
 
@@ -233,9 +263,14 @@ class ContainerManager:
         return [self._summarize_container(c) for c in self._find_by_label_value(image)]
 
     def delete_container(self, name_or_id: str, *, force: bool = False) -> Dict[str, Any]:
+        logger.info(f"Deleting container: {name_or_id} (force: {force})")
         try:
             c = self._get_by_name_or_id(name_or_id)
+            logger.debug(f"Found container: {c.id} ({c.name}) - status: {c.status}")
+            
             c.remove(force=force)
+            logger.info(f"Container {c.id} removed successfully")
+            
             self._record_event({
                 "image": c.labels.get(self.LABEL_KEY, ""),
                 "container_id": c.id,
@@ -246,14 +281,24 @@ class ContainerManager:
             })
             return {"ok": True}
         except NotFound:
+            logger.warning(f"Container not found: {name_or_id}")
             return {"ok": False, "error": "not-found", "id": name_or_id}
         except APIError as e:
+            logger.error(f"API error deleting container {name_or_id}: {e}")
+            return {"ok": False, "error": str(e)}
+        except Exception as e:
+            logger.error(f"Unexpected error deleting container {name_or_id}: {e}")
             return {"ok": False, "error": str(e)}
 
     def stop_container(self, name_or_id: str, timeout: int = 10) -> Dict[str, Any]:
+        logger.info(f"Stopping container: {name_or_id} (timeout: {timeout}s)")
         try:
             c = self._get_by_name_or_id(name_or_id)
+            logger.debug(f"Found container: {c.id} ({c.name}) - status: {c.status}")
+            
             c.stop(timeout=timeout)
+            logger.info(f"Container {c.id} stopped successfully")
+            
             self._record_event({
                 "image": c.labels.get(self.LABEL_KEY, ""),
                 "container_id": c.id,
@@ -264,8 +309,13 @@ class ContainerManager:
             })
             return {"ok": True}
         except NotFound:
+            logger.warning(f"Container not found: {name_or_id}")
             return {"ok": False, "error": "not-found", "id": name_or_id}
         except APIError as e:
+            logger.error(f"API error stopping container {name_or_id}: {e}")
+            return {"ok": False, "error": str(e)}
+        except Exception as e:
+            logger.error(f"Unexpected error stopping container {name_or_id}: {e}")
             return {"ok": False, "error": str(e)}
 
     def start_container(self, name_or_id: str) -> Dict[str, Any]:
