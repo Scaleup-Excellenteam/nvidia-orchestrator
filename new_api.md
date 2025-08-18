@@ -1,3 +1,4 @@
+# app.py
 from __future__ import annotations
 
 from typing import Dict, Optional, Any, List, Literal
@@ -75,6 +76,12 @@ async def do_register():
             print(f"[registry] error: {e}")
     print("[registry] gave up registering after retries")
 
+
+
+
+
+
+
 # -------------------------------------------------------------------
 # Helper: fetch user from UI (/me) and map to {user_id, name, email}
 # -------------------------------------------------------------------
@@ -141,6 +148,7 @@ class PutResourcesBody(BaseModel):
     memory_limit: Optional[str] = None
     disk_limit: Optional[str] = None  # accepted; may be ignored by backend
 
+
 # -------- Response models (strictly match Team 3) --------
 
 class InstanceResources(BaseModel):
@@ -176,10 +184,25 @@ class DeleteResponse(BaseModel):
 class UpdateResourcesResponse(BaseModel):
     updated: List[str]
 
-# ContainerStats class already defined above
 
-# ---- Pydantic v2 models are automatically resolved ----
-# No need for model_rebuild() in Pydantic v2
+class ContainerStats(BaseModel):
+    id: str
+    name: str
+    cpu_percent: float
+    mem_usage: str     
+    mem_limit: str    
+    net_io: str       
+    block_io: str      
+    pids: int
+
+# ---- Pydantic forward-ref safety for dynamic import (pytest loads via spec_from_file_location) ----
+for _m in (
+    StartBody, StopBody, DeleteBody, PutResourcesBody,
+    InstanceResources, InstanceView, InstancesResponse,
+    HealthResponse, StartResponse, StopResponse, DeleteResponse, UpdateResourcesResponse,
+):
+    _m.model_rebuild()
+
 
 # -------- Service Discovery / Registry Schemas --------
 
@@ -206,6 +229,10 @@ class EndpointOut(EndpointIn):
         default_factory=lambda: datetime.now(timezone.utc),
         description="Updated on each register/update"
     )
+
+
+
+
 
 # -------- Utilities --------
 
@@ -263,75 +290,12 @@ def _calc_mem_percent(stats: Dict[str, Any]) -> Optional[float]:
     except Exception:
         return None
 
+
 # -------- Routes --------
 
 @app.get("/health")
 def health():
-    return {"status": "OK"}
-
-@app.get("/images")
-def get_images():
-    """Returns current desired state from PostgresStore"""
-    try:
-        # Import PostgresStore here to avoid circular imports
-        from postgres_store import PostgresStore
-        store = PostgresStore()
-        if store.enabled:
-            return {"images": store.list_desired()}
-        return {"images": []}
-    except Exception as e:
-        return {"images": [], "error": str(e)}
-
-@app.post("/start/container")
-def start_container(body: StartBody):
-    """Starts or reuses a container for a given image with env/ports/resources"""
-    try:
-        # For now, we'll use the existing start logic
-        # This endpoint should be enhanced to handle reuse logic
-        image = body.resources.get("image", "nginx:alpine") if body.resources else "nginx:alpine"
-        count = body.count or 1
-        
-        resources: Dict[str, Any] = {}
-        if body.resources:
-            mem = body.resources.get("memory_limit")
-            cpu = body.resources.get("cpu_limit")
-            if mem:
-                resources["mem_limit"] = mem
-            if cpu is not None:
-                try:
-                    resources["nano_cpus"] = int(float(cpu) * 1_000_000_000)
-                except (ValueError, TypeError):
-                    pass
-        
-        started_ids: List[str] = []
-        for _ in range(count):
-            info = manager.create_container(image, env={}, ports={}, resources=resources)
-            started_ids.append(info["id"])
-        
-        # Return the format expected by the prompt
-        return {
-            "ok": True,
-            "action": "created",
-            "image": image,
-            "container_id": started_ids[0] if started_ids else None,
-            "name": f"container-{started_ids[0]}" if started_ids else None,
-            "status": "running",
-            "ports": {}
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/containers")
-def get_all_containers():
-    """Returns all managed containers with status + host port bindings"""
-    try:
-        # Get all containers from all images
-        all_containers = []
-        # This is a simplified version - you might want to enhance this
-        # to get containers from all managed images
-        return {"containers": all_containers}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return {"ok": True}
 
 # GET `/containers/{imageId}/instances`
 @app.get(
@@ -392,6 +356,7 @@ def instance_health(instanceId: str):
     return body
 
 # POST `/containers/{imageId}/start`
+# POST `/containers/{imageId}/start`
 @app.post(
     "/containers/{imageId}/start",
     response_model=StartResponse,
@@ -436,21 +401,7 @@ def stop_image_instance(imageId: str, body: StopBody):
         raise HTTPException(status_code=400, detail=res.get("error", "failed"))
     return {"stopped": True}
 
-# DELETE `/containers/{idOrName}`
-@app.delete("/containers/{idOrName}")
-def delete_container_by_id(idOrName: str, force: bool = Query(False, description="Force deletion")):
-    """Removes the container by ID or name"""
-    try:
-        res = manager.delete_container(idOrName, force=force)
-        if not res.get("ok"):
-            if res.get("error") == "not-found":
-                raise HTTPException(status_code=404, detail=f"Container '{idOrName}' not found")
-            raise HTTPException(status_code=400, detail=res.get("error", "failed"))
-        return {"deleted": True, "container_id": idOrName, "name": idOrName}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# DELETE `/containers/{imageId}` (legacy endpoint)
+# DELETE `/containers/{imageId}`
 @app.delete(
     "/containers/{imageId}",
     response_model=DeleteResponse,
@@ -481,6 +432,63 @@ def update_resources(imageId: str, body: PutResourcesBody):
     # Contract requires array of instance IDs
     return {"updated": list(updated) if isinstance(updated, (list, tuple, set)) else (updated or [])}
 
+
+
+'''
+## for the billing section . 
+# NEW billing route: /order/{user_id}/container
+@app.get("/order/{user_id}/container", response_model=ContainerStats, response_model_exclude_none=True)
+def get_billing_container_stats_for_user(
+    user_id: str,
+    container_id: str = Query(..., description="Docker container ID"),
+    include_optional: bool = Query(False, description="Include net_io and block_io"),
+):
+    """
+    Returns billing stats + user info from the UI (/me).
+    - user_id in path is for routing/business; user data is fetched from /me as requested.
+    - Optional fields are returned only when include_optional=true.
+    """
+    try:
+        # If your ContainerManager.get_container_stats supports include_optional, prefer:
+        # stats = manager.get_container_stats(container_id, include_optional=include_optional)
+        stats = manager.get_container_stats(container_id)
+
+        # Respect include_optional toggle if manager returns them unconditionally
+        if include_optional and ("net_io" not in stats or "block_io" not in stats):
+            stats.setdefault("net_io", None)
+            stats.setdefault("block_io", None)
+        else:
+            stats.pop("net_io", None)
+            stats.pop("block_io", None)
+
+        ui_user = _fetch_ui_user()
+
+        out: Dict[str, Any] = {
+            "user_id": ui_user["user_id"],
+            "name": ui_user["name"],
+            "email": ui_user["email"],
+            "id": stats["id"],
+            "cpu_percent": stats["cpu_percent"],
+            "mem_usage": stats["mem_usage"],
+            "mem_limit": stats["mem_limit"],
+            "created_at": stats["created_at"],
+        }
+        if include_optional:
+            out["net_io"] = stats.get("net_io")
+            out["block_io"] = stats.get("block_io")
+
+        return out
+
+    except NotFound:
+        raise HTTPException(status_code=404, detail="Container not found")
+    except APIError as e:
+        raise HTTPException(status_code=502, detail=f"Docker API error: {getattr(e, 'explanation', str(e))}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+    
+  '''  
+
+
 # -------- In-memory registry (thread-safe) --------
 
 class _Registry:
@@ -500,7 +508,7 @@ class _Registry:
                 existing.caps = ep.caps
                 existing.last_heartbeat = now
                 return existing
-            out = EndpointOut(**ep.model_dump(), last_heartbeat=now)  # Pydantic v2 compat
+            out = EndpointOut(**ep.model_dict(), last_heartbeat=now)  # Pydantic v2 compat
             self._data[ep.id] = out
             return out
 
@@ -528,6 +536,7 @@ class _Registry:
             return list(self._data.values())
 
 registry = _Registry()
+    
 
 # -------- Service Discovery / Registry Routes --------
 
@@ -540,6 +549,7 @@ def register_or_update_endpoint(body: EndpointIn) -> EndpointOut:
     saved = registry.upsert(body)
     return saved
 
+
 @app.delete("/registry/endpoints/{endpoint_id}", summary="Delete an endpoint")
 def delete_endpoint(endpoint_id: str) -> Dict[str, bool]:
     """
@@ -551,6 +561,7 @@ def delete_endpoint(endpoint_id: str) -> Dict[str, bool]:
         return {"ok": True}
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Endpoint '{endpoint_id}' not found")
+
 
 @app.put(
     "/registry/endpoints/{endpoint_id}/status",
@@ -571,6 +582,32 @@ def set_endpoint_status(endpoint_id: str, status: StatusEnum):
         return updated
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Endpoint '{endpoint_id}' not found")
+
+
+
+## take the user id and the name from the ui . 
+'''
+resp = requests.get("http://backend:8000/me")  
+data = resp.json()
+
+user = {
+    "user_id": data["id"],
+    "name": data["first_name"],
+    "email": data["email"],
+}
+
+
+@app.get("/current_user")
+def current_user():
+    resp = requests.get("http://backend:8000/me")
+    data = resp.json()
+    return {
+        "user_id": data["id"],
+        "name": data["first_name"],
+        "email": data["email"],
+    }
+
+'''
 
 if __name__ == "__main__":
     import uvicorn

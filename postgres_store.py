@@ -1,6 +1,6 @@
 # postgres_store.py
 from __future__ import annotations
-import os, json
+import os, json, time
 from typing import Any, Dict, List, Optional
 import psycopg
 from psycopg.rows import tuple_row
@@ -24,96 +24,114 @@ class PostgresStore:
         logger.info(f"Initializing PostgresStore with DSN: {self.dsn.split('@')[1] if '@' in self.dsn else 'local'}")
         
         self.enabled = False
-        try:
-            with psycopg.connect(self.dsn, autocommit=True) as conn:
-                logger.info("Connected to PostgreSQL successfully")
-                with conn.cursor(row_factory=tuple_row) as cur:
-                    logger.debug("Creating tables if they don't exist...")
-                    
-                    cur.execute("""
-                        CREATE TABLE IF NOT EXISTS desired_images (
-                          image        TEXT PRIMARY KEY,
-                          min_replicas INT  NOT NULL,
-                          max_replicas INT  NOT NULL,
-                          resources    JSONB,
-                          env          JSONB,
-                          ports        JSONB,
-                          updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
-                        )
-                    """)
-                    cur.execute("""
-                        CREATE TABLE IF NOT EXISTS events (
-                          id           BIGSERIAL PRIMARY KEY,
-                          image        TEXT        NOT NULL,
-                          container_id TEXT,
-                          name         TEXT,
-                          host         TEXT,
-                          ports        JSONB,
-                          status       TEXT,
-                          event        TEXT        NOT NULL CHECK (event IN ('create','start','stop','remove')),
-                          ts           TIMESTAMPTZ NOT NULL DEFAULT now()
-                        )
-                    """)
-                    cur.execute("""
-                        CREATE TABLE IF NOT EXISTS health_snapshots (
-                            id BIGSERIAL PRIMARY KEY,
-                            image TEXT NOT NULL,
-                            container_id TEXT NOT NULL,
-                            name TEXT,
-                            host TEXT,
-                            cpu_usage DOUBLE PRECISION,
-                            memory_usage DOUBLE PRECISION,
-                            disk_usage DOUBLE PRECISION,
-                            status TEXT, -- healthy | warning | critical | stopped
-                            ts TIMESTAMPTZ NOT NULL DEFAULT now()
-                        )
-                    """)
-                    cur.execute("CREATE INDEX IF NOT EXISTS health_image_ts_idx ON health_snapshots (image, ts DESC)")
-                    cur.execute(
-                        "CREATE INDEX IF NOT EXISTS health_container_ts_idx ON health_snapshots (container_id, ts DESC)")
+        self._connection_retries = 3
+        self._connection_delay = 2
+        
+        for attempt in range(self._connection_retries):
+            try:
+                with psycopg.connect(self.dsn, autocommit=True, connect_timeout=10) as conn:
+                    logger.info("Connected to PostgreSQL successfully")
+                    with conn.cursor(row_factory=tuple_row) as cur:
+                        logger.debug("Creating tables if they don't exist...")
+                        
+                        cur.execute("""
+                            CREATE TABLE IF NOT EXISTS desired_images (
+                              image        TEXT PRIMARY KEY,
+                              min_replicas INT  NOT NULL,
+                              max_replicas INT  NOT NULL,
+                              resources    JSONB,
+                              env          JSONB,
+                              ports        JSONB,
+                              updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+                            )
+                        """)
+                        cur.execute("""
+                            CREATE TABLE IF NOT EXISTS events (
+                              id           BIGSERIAL PRIMARY KEY,
+                              image        TEXT        NOT NULL,
+                              container_id TEXT,
+                              name         TEXT,
+                              host         TEXT,
+                              ports        JSONB,
+                              status       TEXT,
+                              event        TEXT        NOT NULL CHECK (event IN ('create','start','stop','remove')),
+                              ts           TIMESTAMPTZ NOT NULL DEFAULT now()
+                            )
+                        """)
+                        cur.execute("""
+                            CREATE TABLE IF NOT EXISTS health_snapshots (
+                                id BIGSERIAL PRIMARY KEY,
+                                image TEXT NOT NULL,
+                                container_id TEXT NOT NULL,
+                                name TEXT,
+                                host TEXT,
+                                cpu_usage DOUBLE PRECISION,
+                                memory_usage DOUBLE PRECISION,
+                                disk_usage DOUBLE PRECISION,
+                                status TEXT, -- healthy | warning | critical | stopped
+                                ts TIMESTAMPTZ NOT NULL DEFAULT now()
+                            )
+                        """)
+                        cur.execute("CREATE INDEX IF NOT EXISTS health_image_ts_idx ON health_snapshots (image, ts DESC)")
+                        cur.execute(
+                            "CREATE INDEX IF NOT EXISTS health_container_ts_idx ON health_snapshots (container_id, ts DESC)")
 
-                    cur.execute("CREATE INDEX IF NOT EXISTS events_image_ts_idx ON events (image, ts DESC)")
-                    
-                    logger.info("Database schema initialized successfully")
-            self.enabled = True
-            logger.info("PostgresStore enabled and ready")
-        except Exception as e:
-            logger.error(f"Failed to initialize PostgresStore: {e}")
-            self.enabled = False
+                        cur.execute("CREATE INDEX IF NOT EXISTS events_image_ts_idx ON events (image, ts DESC)")
+                        
+                        logger.info("Database schema initialized successfully")
+                self.enabled = True
+                logger.info("PostgresStore enabled and ready")
+                break
+            except Exception as e:
+                logger.warning(f"PostgreSQL connection attempt {attempt + 1}/{self._connection_retries} failed: {e}")
+                if attempt < self._connection_retries - 1:
+                    logger.info(f"Retrying in {self._connection_delay} seconds...")
+                    time.sleep(self._connection_delay)
+                else:
+                    logger.error(f"Failed to initialize PostgresStore after {self._connection_retries} attempts: {e}")
+                    self.enabled = False
 
     # -------- desired_images --------
     def upsert_desired(self, image: str, doc: Dict[str, Any]) -> None:
         if not self.enabled: return
-        with psycopg.connect(self.dsn, autocommit=True) as conn, conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO desired_images(image,min_replicas,max_replicas,resources,env,ports)
-                VALUES (%s,%s,%s,%s,%s,%s)
-                ON CONFLICT (image) DO UPDATE
-                SET min_replicas=EXCLUDED.min_replicas,
-                    max_replicas=EXCLUDED.max_replicas,
-                    resources=EXCLUDED.resources,
-                    env=EXCLUDED.env,
-                    ports=EXCLUDED.ports,
-                    updated_at=now()
-            """, (
-                image,
-                int(doc.get("min_replicas", 1)),
-                int(doc.get("max_replicas", 1)),
-                json.dumps(doc.get("resources") or {}),
-                json.dumps(doc.get("env") or {}),
-                json.dumps(doc.get("ports") or {}),
-            ))
+        try:
+            with psycopg.connect(self.dsn, autocommit=True) as conn, conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO desired_images(image,min_replicas,max_replicas,resources,env,ports)
+                    VALUES (%s,%s,%s,%s,%s,%s)
+                    ON CONFLICT (image) DO UPDATE
+                    SET min_replicas=EXCLUDED.min_replicas,
+                        max_replicas=EXCLUDED.max_replicas,
+                        resources=EXCLUDED.resources,
+                        env=EXCLUDED.env,
+                        ports=EXCLUDED.ports,
+                        updated_at=now()
+                """, (
+                    image,
+                    int(doc.get("min_replicas", 1)),
+                    int(doc.get("max_replicas", 1)),
+                    json.dumps(doc.get("resources") or {}),
+                    json.dumps(doc.get("env") or {}),
+                    json.dumps(doc.get("ports") or {}),
+                ))
+        except Exception as e:
+            logger.error(f"Failed to upsert desired state for {image}: {e}")
+            # Don't disable the store for individual operation failures
 
     def list_desired(self) -> List[Dict[str, Any]]:
         if not self.enabled: return []
-        with psycopg.connect(self.dsn) as conn, conn.cursor(row_factory=tuple_row) as cur:
-            cur.execute("SELECT image,min_replicas,max_replicas,resources,env,ports FROM desired_images")
-            rows = cur.fetchall()
-        return [
-            {"image": r[0], "min_replicas": r[1], "max_replicas": r[2],
-             "resources": r[3], "env": r[4], "ports": r[5]}
-            for r in rows
-        ]
+        try:
+            with psycopg.connect(self.dsn) as conn, conn.cursor(row_factory=tuple_row) as cur:
+                cur.execute("SELECT image,min_replicas,max_replicas,resources,env,ports FROM desired_images")
+                rows = cur.fetchall()
+            return [
+                {"image": r[0], "min_replicas": r[1], "max_replicas": r[2],
+                 "resources": r[3], "env": r[4], "ports": r[5]}
+                for r in rows
+            ]
+        except Exception as e:
+            logger.error(f"Failed to list desired images: {e}")
+            return []
 
     # -------- events --------
     def record_event(self, payload: Dict[str, Any]) -> None:
@@ -142,65 +160,81 @@ class PostgresStore:
 
     def list_events(self, image: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
         if not self.enabled: return []
-        with psycopg.connect(self.dsn) as conn, conn.cursor(row_factory=tuple_row) as cur:
-            if image:
-                cur.execute("""
-                    SELECT image,container_id,name,host,ports,status,event,ts
-                    FROM events WHERE image=%s ORDER BY ts DESC LIMIT %s
-                """, (image, limit))
-            else:
-                cur.execute("""
-                    SELECT image,container_id,name,host,ports,status,event,ts
-                    FROM events ORDER BY ts DESC LIMIT %s
-                """, (limit,))
-            rows = cur.fetchall()
-        return [
-            {"image": r[0], "container_id": r[1], "name": r[2], "host": r[3],
-             "ports": r[4], "status": r[5], "event": r[6], "ts": r[7].timestamp()}
-            for r in rows
-        ]
+        try:
+            with psycopg.connect(self.dsn) as conn, conn.cursor(row_factory=tuple_row) as cur:
+                if image:
+                    cur.execute("""
+                        SELECT image,container_id,name,host,ports,status,event,ts
+                        FROM events WHERE image=%s ORDER BY ts DESC LIMIT %s
+                    """, (image, limit))
+                else:
+                    cur.execute("""
+                        SELECT image,container_id,name,host,ports,status,event,ts
+                        FROM events ORDER BY ts DESC LIMIT %s
+                    """, (limit,))
+                rows = cur.fetchall()
+            return [
+                {"image": r[0], "container_id": r[1], "name": r[2], "host": r[3],
+                 "ports": r[4], "status": r[5], "event": r[6], "ts": r[7].timestamp()}
+                for r in rows
+            ]
+        except Exception as e:
+            logger.error(f"Failed to list events: {e}")
+            return []
     def record_health_snapshot(self, payload: Dict[str, Any]) -> None:
         if not self.enabled: return
-        with psycopg.connect(self.dsn, autocommit=True) as conn, conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO health_snapshots(image,container_id,name,host,cpu_usage,memory_usage,disk_usage,status,ts)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,now())
-            """, (
-                payload.get("image"),
-                payload.get("container_id"),
-                payload.get("name"),
-                payload.get("host"),
-                payload.get("cpu_usage"),
-                payload.get("memory_usage"),
-                payload.get("disk_usage"),
-                payload.get("status"),
-            ))
+        try:
+            with psycopg.connect(self.dsn, autocommit=True) as conn, conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO health_snapshots(image,container_id,name,host,cpu_usage,memory_usage,disk_usage,status,ts)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,now())
+                """, (
+                    payload.get("image"),
+                    payload.get("container_id"),
+                    payload.get("name"),
+                    payload.get("host"),
+                    payload.get("cpu_usage"),
+                    payload.get("memory_usage"),
+                    payload.get("disk_usage"),
+                    payload.get("status"),
+                ))
+        except Exception as e:
+            logger.error(f"Failed to record health snapshot: {e}")
+            # Don't disable the store for individual operation failures
 
     def list_recent_health(self, image: Optional[str] = None, container_id: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
         if not self.enabled: return []
-        with psycopg.connect(self.dsn) as conn, conn.cursor(row_factory=tuple_row) as cur:
-            if container_id:
-                cur.execute("""SELECT image,container_id,name,host,cpu_usage,memory_usage,disk_usage,status,ts
-                               FROM health_snapshots WHERE container_id=%s ORDER BY ts DESC LIMIT %s""",
-                            (container_id, limit))
-            elif image:
-                cur.execute("""SELECT image,container_id,name,host,cpu_usage,memory_usage,disk_usage,status,ts
-                               FROM health_snapshots WHERE image=%s ORDER BY ts DESC LIMIT %s""",
-                            (image, limit))
-            else:
-                cur.execute("""SELECT image,container_id,name,host,cpu_usage,memory_usage,disk_usage,status,ts
-                               FROM health_snapshots ORDER BY ts DESC LIMIT %s""",
-                            (limit,))
-            rows = cur.fetchall()
-        return [
-            {"image": r[0], "container_id": r[1], "name": r[2], "host": r[3],
-             "cpu_usage": r[4], "memory_usage": r[5], "disk_usage": r[6],
-             "status": r[7], "ts": r[8].timestamp()}
-            for r in rows
-        ]
+        try:
+            with psycopg.connect(self.dsn) as conn, conn.cursor(row_factory=tuple_row) as cur:
+                if container_id:
+                    cur.execute("""SELECT image,container_id,name,host,cpu_usage,memory_usage,disk_usage,status,ts
+                                   FROM health_snapshots WHERE container_id=%s ORDER BY ts DESC LIMIT %s""",
+                                (container_id, limit))
+                elif image:
+                    cur.execute("""SELECT image,container_id,name,host,cpu_usage,memory_usage,disk_usage,status,ts
+                                   FROM health_snapshots WHERE image=%s ORDER BY ts DESC LIMIT %s""",
+                                (image, limit))
+                else:
+                    cur.execute("""SELECT image,container_id,name,host,cpu_usage,memory_usage,disk_usage,status,ts
+                                   FROM health_snapshots ORDER BY ts DESC LIMIT %s""",
+                                (limit,))
+                rows = cur.fetchall()
+            return [
+                {"image": r[0], "container_id": r[1], "name": r[2], "host": r[3],
+                 "cpu_usage": r[4], "memory_usage": r[5], "disk_usage": r[6],
+                 "status": r[7], "ts": r[8].timestamp()}
+                for r in rows
+            ]
+        except Exception as e:
+            logger.error(f"Failed to list recent health: {e}")
+            return []
 
     def prune_old_health(self, older_than_days: int = 7) -> int:
         if not self.enabled: return 0
-        with psycopg.connect(self.dsn, autocommit=True) as conn, conn.cursor() as cur:
-            cur.execute("DELETE FROM health_snapshots WHERE ts < now() - (%s || ' days')::interval", (older_than_days,))
-            return cur.rowcount
+        try:
+            with psycopg.connect(self.dsn, autocommit=True) as conn, conn.cursor() as cur:
+                cur.execute("DELETE FROM health_snapshots WHERE ts < now() - (%s || ' days')::interval", (older_than_days,))
+                return cur.rowcount
+        except Exception as e:
+            logger.error(f"Failed to prune old health data: {e}")
+            return 0

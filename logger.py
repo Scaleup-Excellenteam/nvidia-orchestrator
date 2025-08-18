@@ -1,5 +1,6 @@
 import os
 import logging
+import sys
 """
 add this module into your project
 """
@@ -8,21 +9,37 @@ add this module into your project
 SERVICE_NAME = "nvidia-orchestrator"
 
 # Get log file path from environment variable (default: /app/logs/combined.log)
-log_dir = os.path.join(os.path.dirname(__file__), "app/logs")
+log_dir = os.path.join(os.path.dirname(__file__), "logs")
 log_file_path = os.path.join(log_dir, "combined.log")
 
-
 # If using the default path, ensure the directory exists
-os.makedirs(log_dir, exist_ok=True)
-log_file = os.environ.get("LOG_FILE", log_file_path)
-
+try:
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.environ.get("LOG_FILE", log_file_path)
+except Exception:
+    # If we can't create the log directory, just use console logging
+    log_file = None
 
 # Configure logging
-logging.basicConfig(
-    filename=log_file,
-    level=logging.INFO,
-    format='[%(asctime)s] [%(name)s] %(message)s'
-)
+if log_file and os.access(os.path.dirname(log_file), os.W_OK):
+    # File logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='[%(asctime)s] [%(name)s] %(message)s',
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler(sys.stdout)  # Also log to console
+        ]
+    )
+else:
+    # Console only logging (for container environments)
+    logging.basicConfig(
+        level=logging.INFO,
+        format='[%(asctime)s] [%(name)s] %(message)s',
+        handlers=[
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
 
 # set the logger name
 logger = logging.getLogger(SERVICE_NAME)

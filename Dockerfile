@@ -13,10 +13,14 @@ WORKDIR /app
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# Copy source
-COPY app.py container_manager.py postgres_store.py health_monitor.py /app/
+# Copy source files
+COPY app.py container_manager.py postgres_store.py health_monitor.py logger.py /app/
+COPY start.sh /app/start.sh
+
+# Create logs directory and make startup script executable
+RUN mkdir -p /app/logs && chmod +x /app/start.sh
 
 EXPOSE 8000
 
-# Default entrypoint is the API; compose will override for health-monitor
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+# Use the startup script
+CMD ["/app/start.sh"]

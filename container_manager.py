@@ -189,6 +189,19 @@ class ContainerManager:
         logger.info(f"Creating new container for image: {image}")
         logger.debug(f"Container config - env: {env}, ports: {ports}, resources: {resources}")
         
+        # Validate image exists or can be pulled
+        try:
+            self.client.images.get(image)
+            logger.debug(f"Image {image} already exists locally")
+        except Exception:
+            logger.info(f"Pulling image {image}...")
+            try:
+                self.client.images.pull(image)
+                logger.info(f"Successfully pulled image {image}")
+            except Exception as e:
+                logger.error(f"Failed to pull image {image}: {e}")
+                raise RuntimeError(f"Image {image} not available and cannot be pulled: {e}")
+        
         port_map = self._normalize_ports(ports)
         if not port_map:
             port_map = self._detect_exposed_ports(image)
@@ -209,7 +222,21 @@ class ContainerManager:
             )
             logger.info(f"Container created: {container.id} ({container.name})")
             
-            time.sleep(0.2)
+            # Wait a bit for container to stabilize
+            time.sleep(0.5)
+            
+            # Verify container is actually running
+            container.reload()
+            if container.status != "running":
+                logger.warning(f"Container {container.id} is not running, status: {container.status}")
+                # Try to get logs for debugging
+                try:
+                    logs = container.logs().decode('utf-8', errors='ignore')
+                    if logs.strip():
+                        logger.error(f"Container logs: {logs}")
+                except Exception:
+                    pass
+            
             summary = self._summarize_container(container)
             
             self._record_event({
@@ -227,6 +254,13 @@ class ContainerManager:
             
         except Exception as e:
             logger.error(f"Failed to create container for {image}: {e}")
+            # Clean up any partially created container
+            try:
+                if 'container' in locals():
+                    container.remove(force=True)
+                    logger.info(f"Cleaned up failed container {container.id}")
+            except Exception:
+                pass
             raise
 
     # -------- public API --------
@@ -345,6 +379,65 @@ class ContainerManager:
             return {"ok": False, "error": "not-found", "id": name_or_id}
         except APIError as e:
             return {"ok": False, "error": str(e)}
+
+    def register_desired_state(
+        self,
+        image: str,
+        *,
+        min_replicas: int = 1,
+        max_replicas: int = 1,
+        resources: Optional[Dict[str, Any]] = None,
+        env: Optional[Dict[str, str]] = None,
+        ports: Optional[Dict[str, Optional[int]]] = None
+    ) -> Dict[str, Any]:
+        """Register desired state for an image"""
+        logger.info(f"Registering desired state for {image}: {min_replicas}-{max_replicas} replicas")
+        
+        # Store the desired state
+        if hasattr(self, '_store') and self._store and getattr(self._store, 'enabled', False):
+            doc = {
+                "image": image,
+                "min_replicas": min_replicas,
+                "max_replicas": max_replicas,
+                "resources": resources or {},
+                "env": env or {},
+                "ports": ports or {},
+            }
+            self._store.upsert_desired(image, doc)
+            logger.info(f"Desired state persisted for {image}")
+        
+        # Ensure we have the right number of running containers
+        current_instances = self.list_instances_for_image(image)
+        running_count = len([i for i in current_instances if i.get("state") == "running"])
+        
+        if running_count < min_replicas:
+            # Start more containers
+            needed = min_replicas - running_count
+            logger.info(f"Starting {needed} additional containers for {image}")
+            for _ in range(needed):
+                try:
+                    self.create_container(image, env=env, ports=ports, resources=resources)
+                except Exception as e:
+                    logger.error(f"Failed to start additional container for {image}: {e}")
+        
+        elif running_count > max_replicas:
+            # Stop excess containers
+            excess = running_count - max_replicas
+            logger.info(f"Stopping {excess} excess containers for {image}")
+            running_instances = [i for i in current_instances if i.get("state") == "running"]
+            for i in range(excess):
+                try:
+                    self.stop_container(running_instances[i]["id"])
+                except Exception as e:
+                    logger.error(f"Failed to stop excess container for {image}: {e}")
+        
+        return {
+            "image": image,
+            "min_replicas": min_replicas,
+            "max_replicas": max_replicas,
+            "current_running": len([i for i in current_instances if i.get("state") == "running"]),
+            "total_instances": len(current_instances)
+        }
 
     def update_resources_for_image(
         self,

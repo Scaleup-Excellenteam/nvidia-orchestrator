@@ -1,0 +1,10 @@
+[2025-08-18 20:43:44,850] [nvidia-orchestrator] Initializing ContainerManager
+[2025-08-18 20:43:44,875] [nvidia-orchestrator] Docker client initialized successfully
+[2025-08-18 20:43:44,875] [nvidia-orchestrator] Initializing PostgresStore with DSN: 127.0.0.1:5432/orchestrator
+[2025-08-18 20:43:54,923] [nvidia-orchestrator] PostgreSQL connection attempt 1/3 failed: connection timeout expired
+[2025-08-18 20:43:54,923] [nvidia-orchestrator] Retrying in 2 seconds...
+[2025-08-18 20:44:07,044] [nvidia-orchestrator] PostgreSQL connection attempt 2/3 failed: connection timeout expired
+[2025-08-18 20:44:07,044] [nvidia-orchestrator] Retrying in 2 seconds...
+[2025-08-18 20:44:19,080] [nvidia-orchestrator] PostgreSQL connection attempt 3/3 failed: connection timeout expired
+[2025-08-18 20:44:19,096] [nvidia-orchestrator] Failed to initialize PostgresStore after 3 attempts: connection timeout expired
+[2025-08-18 20:44:19,097] [nvidia-orchestrator] PostgreSQL store disabled - events will not be persisted
