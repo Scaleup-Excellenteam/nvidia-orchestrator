@@ -13,13 +13,14 @@ Key ideas:
 """
 
 from __future__ import annotations
-
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
 import time
 import docker
 from docker.models.containers import Container
 from docker.errors import NotFound, APIError
-
+import os
+import requests
 
 def _to_nano_cpus(value) -> Optional[int]:
     """
@@ -510,7 +511,7 @@ class ContainerManager:
 
 ### this data for the billing .
 
-def _format_bytes(size: int) -> str:
+def _format_bytes(size: Optional[int]) -> str:
     """Convert bytes to human-readable string (GB/MB/KB)."""
     if size is None:
         return "0B"
@@ -521,60 +522,103 @@ def _format_bytes(size: int) -> str:
         size /= 1024
     return f"{size:.2f} PB"
 
-def get_container_stats(self, container_id: str) -> Dict[str, Any]:
-        """Return a one-shot 'docker stats' summary for billing, human-readable."""
+def _fetch_current_user() -> Dict[str, Optional[str]]:
+    """
+    Calls the UI's /me endpoint and maps it to {user_id, name, email}.
+    URL נקבע ע"י משתנה סביבה UI_ME_URL (ברירת מחדל: http://localhost:3000/me)
+    """
+    me_url = os.getenv("UI_ME_URL", "http://localhost:3000/me")
+    try:
+        resp = requests.get(me_url, timeout=5)
+        resp.raise_for_status()
+        data = resp.json() if resp.content else {}
+    except Exception:
+        # אם אין UI או תקלה — נחזיר שדות ריקים ולא נפיל את הבקשה
+        return {"user_id": None, "name": None, "email": None}
+
+    # מיפוי שדות נפוצים
+    user_id = data.get("id") or data.get("user_id")
+    name = data.get("first_name") or data.get("name")
+    email = data.get("email")
+
+    return {"user_id": user_id, "name": name, "email": email}
+
+# --- עדכון: אפשרות להחזיר שדות אופציונליים (net_io, block_io) + הוספת user info ---
+def get_container_stats(self, container_id: str, include_optional: bool = False) -> Dict[str, Any]:
+    """Return a one-shot 'docker stats' summary for billing, with created_at."""
+    try:
+        c = self.client.containers.get(container_id)
+        s = c.stats(stream=False)
+
+        # ---- CPU % (Docker-style) ----
+        cpu_total = s.get("cpu_stats", {}).get("cpu_usage", {}).get("total_usage", 0)
+        cpu_prev  = s.get("precpu_stats", {}).get("cpu_usage", {}).get("total_usage", 0)
+        sys_total = s.get("cpu_stats", {}).get("system_cpu_usage", 0) or 0
+        sys_prev  = s.get("precpu_stats", {}).get("system_cpu_usage", 0) or 0
+        cpu_delta = cpu_total - cpu_prev
+        sys_delta = sys_total - sys_prev
+        online    = s.get("cpu_stats", {}).get("online_cpus")
+        if not online:
+            per_cpu = s.get("cpu_stats", {}).get("cpu_usage", {}).get("percpu_usage", []) or []
+            online = max(1, len(per_cpu))
+        cpu_percent = 0.0
+        if cpu_delta > 0 and sys_delta > 0:
+            cpu_percent = (cpu_delta / sys_delta) * online * 100.0
+
+        # ---- Memory ----
+        mem_usage_bytes = int(s.get("memory_stats", {}).get("usage", 0) or 0)
+        mem_limit_bytes = int(s.get("memory_stats", {}).get("limit", 0) or 0)
+        mem_usage_hr = _format_bytes(mem_usage_bytes)
+        mem_limit_hr = _format_bytes(mem_limit_bytes)
+
+        # ---- Optional I/O (only if requested) ----
+        networks = s.get("networks", {}) or {}
+        rx_bytes = sum(int(v.get("rx_bytes", 0) or 0) for v in networks.values()) if isinstance(networks, dict) else 0
+        tx_bytes = sum(int(v.get("tx_bytes", 0) or 0) for v in networks.values()) if isinstance(networks, dict) else 0
+        net_io_hr = f"{_format_bytes(rx_bytes)} / {_format_bytes(tx_bytes)}"
+
+        blk = s.get("blkio_stats", {}) or {}
+        io_rec = blk.get("io_service_bytes_recursive") or []
+        read_bytes  = sum(int(x.get("value", 0) or 0) for x in io_rec if (x.get("op", "") or "").lower() == "read")
+        write_bytes = sum(int(x.get("value", 0) or 0) for x in io_rec if (x.get("op", "") or "").lower() == "write")
+        block_io_hr = f"{_format_bytes(read_bytes)} / {_format_bytes(write_bytes)}"
+
+        # ---- User info from UI (/me) ----
+        user = _fetch_current_user()
+
+        # ---- Container created_at (normalize to UTC ISO-8601) ----
+        created_raw = (c.attrs or {}).get("Created", "") or ""
+        created_at = created_raw
         try:
-            c = self.client.containers.get(container_id)
-            s = c.stats(stream=False)
+            if created_raw:
+                created_at = datetime.fromisoformat(created_raw.replace("Z", "+00:00")) \
+                    .astimezone(timezone.utc).isoformat()
+        except Exception:
+            pass  # keep raw if parsing fails
 
-            # ---- CPU % (כפי ש-docker מחשב) ----
-            cpu_total = s.get("cpu_stats", {}).get("cpu_usage", {}).get("total_usage", 0)
-            cpu_prev  = s.get("precpu_stats", {}).get("cpu_usage", {}).get("total_usage", 0)
-            sys_total = s.get("cpu_stats", {}).get("system_cpu_usage", 0) or 0
-            sys_prev  = s.get("precpu_stats", {}).get("system_cpu_usage", 0) or 0
-            cpu_delta = cpu_total - cpu_prev
-            sys_delta = sys_total - sys_prev
-            online = s.get("cpu_stats", {}).get("online_cpus")
-            if not online:
-                per_cpu = s.get("cpu_stats", {}).get("cpu_usage", {}).get("percpu_usage", []) or []
-                online = max(1, len(per_cpu))
-            cpu_percent = 0.0
-            if cpu_delta > 0 and sys_delta > 0:
-                cpu_percent = (cpu_delta / sys_delta) * online * 100.0
+        out: Dict[str, Any] = {
+            # identifiers / context
+            "id": c.id,
+            "created_at": created_at,  # <-- only timestamp added
 
-            # ---- Memory ----
-            mem_usage_bytes = int(s.get("memory_stats", {}).get("usage", 0) or 0)
-            mem_limit_bytes = int(s.get("memory_stats", {}).get("limit", 0) or 0)
-            mem_usage_hr = _format_bytes(mem_usage_bytes)
-            mem_limit_hr = _format_bytes(mem_limit_bytes)
+            # user context
+            "user_id": user["user_id"],
+            "email":   user["email"],
+            "name":    user["name"],
 
-            # ---- Network I/O (sum של כל הממשקים) ----
-            networks = s.get("networks", {}) or {}
-            rx_bytes = sum(int(v.get("rx_bytes", 0) or 0) for v in networks.values()) if isinstance(networks, dict) else 0
-            tx_bytes = sum(int(v.get("tx_bytes", 0) or 0) for v in networks.values()) if isinstance(networks, dict) else 0
-            net_io_hr = f"{_format_bytes(rx_bytes)} / {_format_bytes(tx_bytes)}"
+            # metrics
+            "cpu_percent": round(cpu_percent, 2),
+            "mem_usage":   mem_usage_hr,
+            "mem_limit":   mem_limit_hr,
+        }
 
-            # ---- Block I/O ----
-            blk = s.get("blkio_stats", {}) or {}
-            io_rec = blk.get("io_service_bytes_recursive") or []
-            read_bytes  = sum(int(x.get("value", 0) or 0) for x in io_rec if (x.get("op", "") or "").lower() == "read")
-            write_bytes = sum(int(x.get("value", 0) or 0) for x in io_rec if (x.get("op", "") or "").lower() == "write")
-            block_io_hr = f"{_format_bytes(read_bytes)} / {_format_bytes(write_bytes)}"
+        if include_optional:
+            out["net_io"]   = net_io_hr
+            out["block_io"] = block_io_hr
 
-            # ---- PIDs ----
-            pids = int(s.get("pids_stats", {}).get("current", 0) or 0)
+        return out
 
-            return {
-                "id": c.id,
-                "name": c.name,
-                "cpu_percent": round(cpu_percent, 2),
-                "mem_usage": mem_usage_hr,     
-                "mem_limit": mem_limit_hr,    
-                "net_io": net_io_hr,           
-                "block_io": block_io_hr,       
-                "pids": pids,
-            }
-        except NotFound:
-            raise
-        except APIError:
-            raise
+    except NotFound:
+        raise
+    except APIError:
+        raise
