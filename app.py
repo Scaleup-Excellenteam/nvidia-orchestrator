@@ -85,6 +85,15 @@ class UpdateResourcesResponse(BaseModel):
     updated: List[str]
 
 
+# ---- Pydantic forward-ref safety for dynamic import (pytest loads via spec_from_file_location) ----
+for _m in (
+    StartBody, StopBody, DeleteBody, PutResourcesBody,
+    InstanceResources, InstanceView, InstancesResponse,
+    HealthResponse, StartResponse, StopResponse, DeleteResponse, UpdateResourcesResponse,
+):
+    _m.model_rebuild()
+
+
 # -------- Utilities --------
 
 def _first_endpoint_from_summary(s: Dict[str, Any]) -> str:
@@ -207,6 +216,7 @@ def instance_health(instanceId: str):
     return body
 
 # POST `/containers/{imageId}/start`
+# POST `/containers/{imageId}/start`
 @app.post(
     "/containers/{imageId}/start",
     response_model=StartResponse,
@@ -222,9 +232,14 @@ def start_image(imageId: str, body: StartBody):
         cpu = body.resources.get("cpu_limit")
         if mem:
             resources["mem_limit"] = mem
-        if cpu:
-            resources["cpus"] = cpu
-        # disk_limit is accepted by contract but not enforced here (no-op)
+        if cpu is not None:
+            # convert fractional CPUs (e.g. "0.25") to nano_cpus (int)
+            try:
+                resources["nano_cpus"] = int(float(cpu) * 1_000_000_000)
+            except (ValueError, TypeError):
+                # ignore if unparsable; manager will run without CPU limit
+                pass
+        # disk_limit is accepted by contract but not enforced (no-op)
 
     started_ids: List[str] = []
     for _ in range(count):

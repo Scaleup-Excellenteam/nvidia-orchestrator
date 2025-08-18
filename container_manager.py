@@ -21,6 +21,59 @@ from docker.models.containers import Container
 from docker.errors import NotFound, APIError
 
 
+def _to_nano_cpus(value) -> Optional[int]:
+    """
+    Convert fractional CPUs (e.g., 0.25 / "0.25") to nano_cpus int for Docker SDK.
+    Returns None if value is missing or unparsable or <= 0.
+    """
+    if value is None:
+        return None
+    try:
+        f = float(value)
+        if f > 0:
+            return int(f * 1_000_000_000)
+    except (TypeError, ValueError):
+        pass
+    return None
+
+
+def _normalize_run_resources(resources: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Normalize arbitrary resource hints into Docker SDK-supported kwargs for run().
+
+    Accepts:
+      - "mem_limit" / "memory" / "memory_limit"   -> mem_limit
+      - "nano_cpus" (int)                          -> nano_cpus
+      - "cpus" / "cpu" / "cpu_limit" (float/str)  -> nano_cpus (converted)
+
+    Drops unknown keys and None values.
+    """
+    resources = resources or {}
+    out: Dict[str, Any] = {}
+
+    # memory
+    mem = resources.get("mem_limit") or resources.get("memory") or resources.get("memory_limit")
+    if mem:
+        out["mem_limit"] = mem
+
+    # cpu
+    if resources.get("nano_cpus") is not None:
+        try:
+            n = int(resources["nano_cpus"])
+            if n > 0:
+                out["nano_cpus"] = n
+        except (TypeError, ValueError):
+            pass
+    else:
+        cpu_any = resources.get("cpus") or resources.get("cpu") or resources.get("cpu_limit")
+        n = _to_nano_cpus(cpu_any)
+        if n:
+            out["nano_cpus"] = n
+
+    # cleanup
+    return {k: v for k, v in out.items() if v is not None}
+
+
 class ContainerManager:
     """
     Manage Docker containers in a UI-friendly way while keeping existing behavior.
@@ -271,23 +324,14 @@ class ContainerManager:
           publish them to random host ports.
         - Resources:
             * mem_limit: supports "256m", "1g", etc.
-            * cpus:     supports float or string (e.g., 0.5 / "0.5")
+            * cpu_limit/cpus/cpu: converted to nano_cpus for Docker SDK.
         """
-        mem_limit = None
-        cpus = None
-        if resources:
-            mem_limit = resources.get("mem_limit") or resources.get("memory") or resources.get("memory_limit")
-            cpus = resources.get("cpus") or resources.get("cpu") or resources.get("cpu_limit")
-            try:
-                if isinstance(cpus, str):
-                    cpus = float(cpus)
-            except Exception:
-                cpus = None
-
         port_map = self._normalize_ports(ports)
         if not port_map:
             # auto-detect exposed ports and publish to random host ports
             port_map = self._detect_exposed_ports(image)
+
+        run_kwargs = _normalize_run_resources(resources)
 
         container = self.client.containers.run(
             image=image,
@@ -295,9 +339,8 @@ class ContainerManager:
             environment=env or None,
             ports=port_map or None,
             labels={self.LABEL_KEY: image},
-            mem_limit=mem_limit,
-            cpus=cpus,
             restart_policy={"Name": "unless-stopped"},
+            **run_kwargs,  # only valid keys (e.g., mem_limit, nano_cpus)
         )
         # brief pause to let Docker populate NetworkSettings/Ports
         time.sleep(0.2)
@@ -453,12 +496,9 @@ class ContainerManager:
             if memory_limit:
                 params["mem_limit"] = memory_limit
             if cpu_limit is not None:
-                try:
-                    cpus = float(cpu_limit) if isinstance(cpu_limit, str) else cpu_limit
-                    if cpus and cpus > 0:
-                        params["nano_cpus"] = int(cpus * 1e9)
-                except Exception:
-                    pass
+                n = _to_nano_cpus(cpu_limit)
+                if n:
+                    params["nano_cpus"] = n
             if params:
                 try:
                     c.update(**params)
