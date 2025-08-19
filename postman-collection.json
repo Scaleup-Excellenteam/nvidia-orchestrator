@@ -1,0 +1,362 @@
+{
+  "info": {
+    "name": "NVIDIA Orchestrator API",
+    "version": "1.0.0",
+    "description": "Complete collection of NVIDIA Orchestrator API endpoints for container management, health monitoring, and service registry.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health & Monitoring",
+      "item": [
+        {
+          "name": "Basic Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Detailed Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/detailed",
+              "host": ["{{baseUrl}}"],
+              "path": ["health", "detailed"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Integration Test",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/test/integration",
+              "host": ["{{baseUrl}}"],
+              "path": ["test", "integration"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "System Resources",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/system/resources",
+              "host": ["{{baseUrl}}"],
+              "path": ["system", "resources"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Container Management",
+      "item": [
+        {
+          "name": "Get Images",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/images",
+              "host": ["{{baseUrl}}"],
+              "path": ["images"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Start Container",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"count\": 1,\n  \"resources\": {\n    \"image\": \"nginx:alpine\",\n    \"memory_limit\": \"256m\",\n    \"cpu_limit\": \"0.25\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/start/container",
+              "host": ["{{baseUrl}}"],
+              "path": ["start", "container"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List All Containers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/containers",
+              "host": ["{{baseUrl}}"],
+              "path": ["containers"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Image Instances",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/containers/nginx:alpine/instances",
+              "host": ["{{baseUrl}}"],
+              "path": ["containers", "nginx:alpine", "instances"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Instance Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/containers/instances/container123/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["containers", "instances", "container123", "health"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Start Image Instances",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"count\": 2,\n  \"resources\": {\n    \"cpu_limit\": \"0.5\",\n    \"memory_limit\": \"512m\",\n    \"disk_limit\": \"10g\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/containers/nginx:alpine/start",
+              "host": ["{{baseUrl}}"],
+              "path": ["containers", "nginx:alpine", "start"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Stop Container Instance",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instanceId\": \"container123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/containers/nginx:alpine/stop",
+              "host": ["{{baseUrl}}"],
+              "path": ["containers", "nginx:alpine", "stop"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Container",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/containers/container123?force=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["containers", "container123"],
+              "query": [
+                {
+                  "key": "force",
+                  "value": "true"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Container Resources",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpu_limit\": \"1.0\",\n  \"memory_limit\": \"1024m\",\n  \"disk_limit\": \"20g\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/containers/nginx:alpine/resources",
+              "host": ["{{baseUrl}}"],
+              "path": ["containers", "nginx:alpine", "resources"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Service Registry",
+      "item": [
+        {
+          "name": "Register Endpoint",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"web-service-1\",\n  \"image_id\": \"nginx:alpine\",\n  \"host\": \"192.168.1.100\",\n  \"port\": 80,\n  \"caps\": {\n    \"cpu\": \"0.5\",\n    \"mem\": \"256m\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/registry/endpoints",
+              "host": ["{{baseUrl}}"],
+              "path": ["registry", "endpoints"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Endpoint",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/registry/endpoints/web-service-1",
+              "host": ["{{baseUrl}}"],
+              "path": ["registry", "endpoints", "web-service-1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Endpoint Status",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/registry/endpoints/web-service-1/status?status=DOWN",
+              "host": ["{{baseUrl}}"],
+              "path": ["registry", "endpoints", "web-service-1", "status"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "DOWN",
+                  "description": "Options: UP, DOWN"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Documentation",
+      "item": [
+        {
+          "name": "Swagger UI",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/docs",
+              "host": ["{{baseUrl}}"],
+              "path": ["docs"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ReDoc",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/redoc",
+              "host": ["{{baseUrl}}"],
+              "path": ["redoc"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "OpenAPI JSON",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/openapi.json",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi.json"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ]
+} 

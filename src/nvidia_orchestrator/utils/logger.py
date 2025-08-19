@@ -1,15 +1,14 @@
 """
 Logging configuration for NVIDIA Orchestrator.
 
-This module provides centralized logging configuration for the entire application.
+This module provides centralized logging configuration for the entire
+application.
 """
 
 from __future__ import annotations
 
 import logging
-import os
 import sys
-from pathlib import Path
 from typing import Optional
 
 
@@ -38,7 +37,7 @@ def get_logger(name: Optional[str] = None) -> logging.Logger:
 
 def configure_logger(logger_instance: logging.Logger) -> None:
     """
-    Configure a logger instance with file and console handlers.
+    Configure a logger instance with console handler only.
     
     Args:
         logger_instance: Logger instance to configure.
@@ -50,30 +49,7 @@ def configure_logger(logger_instance: logging.Logger) -> None:
         '[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s'
     )
 
-    # Try to set up file logging
-    log_file = os.environ.get("LOG_FILE")
-    if not log_file:
-        # Default log location
-        log_dir = Path(__file__).parent.parent.parent.parent / "logs"
-        log_dir.mkdir(parents=True, exist_ok=True)
-        log_file = log_dir / "combined.log"
-
-    try:
-        if isinstance(log_file, str):
-            log_file = Path(log_file)
-
-        # Ensure parent directory exists
-        log_file.parent.mkdir(parents=True, exist_ok=True)
-
-        # File handler
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setFormatter(formatter)
-        logger_instance.addHandler(file_handler)
-    except Exception as e:
-        # If file logging fails, just use console
-        print(f"Warning: Could not set up file logging: {e}", file=sys.stderr)
-
-    # Console handler (always add)
+    # Console handler only - no file logging
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
     logger_instance.addHandler(console_handler)

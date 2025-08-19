@@ -30,7 +30,6 @@ services:
       - "8000:8000"
     environment:
       POSTGRES_URL: postgresql://postgres:postgres@postgres:5432/orchestrator
-      LOG_FILE: /app/logs/combined.log
       HEALTH_INTERVAL_SECONDS: "60"
       HEALTH_RETENTION_DAYS: "7"
       PYTHONPATH: /app/src

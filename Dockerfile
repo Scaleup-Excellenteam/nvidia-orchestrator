@@ -11,8 +11,7 @@ WORKDIR /app
 
 # Set environment variables
 ENV PYTHONPATH=/app/src:${PYTHONPATH:-} \
-    PYTHONUNBUFFERED=1 \
-    LOG_FILE=/app/logs/combined.log
+    PYTHONUNBUFFERED=1
 
 # Development stage
 FROM base AS development

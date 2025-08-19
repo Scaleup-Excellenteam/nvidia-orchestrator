@@ -93,9 +93,6 @@ POSTGRES_URL=postgresql://postgres:postgres@localhost:5432/orchestrator
 HEALTH_INTERVAL_SECONDS=60
 HEALTH_RETENTION_DAYS=7
 
-# Logging Configuration
-LOG_FILE=/app/logs/combined.log
-
 # Service Discovery (Optional)
 REGISTRY_URL=http://registry:8000/registry/endpoints
 REGISTRY_API_KEY=your-api-key
@@ -181,7 +178,9 @@ docker run -p 8000:8000 \
 
 4. **View Logs:**
    ```bash
-   tail -f logs/combined.log
+   # Logs are now output to console only
+   # View container logs with:
+   docker-compose logs -f orchestrator-api
    ```
 
 ## 📖 Documentation

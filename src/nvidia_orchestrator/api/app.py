@@ -395,12 +395,29 @@ class ResourcesBody(BaseModel):
     memory_limit: Optional[str] = None
     disk_limit: Optional[str] = None  # accepted by contract; may be no-op
 
+class ResourceRequirements(BaseModel):
+    """Resource requirements for container instances"""
+    cpu: str = Field(..., description="CPU allocation (e.g., '1.0', '0.5')")
+    memory: str = Field(..., description="Memory allocation (e.g., '512Mi', '1Gi')")
+    disk: str = Field(..., description="Disk allocation (e.g., '10GB', '1Gi')")
+
+class PortMapping(BaseModel):
+    """Port mapping configuration"""
+    container: int = Field(..., description="Container port number")
+    host: int = Field(..., description="Host port number")
+
 class StartBody(BaseModel):
-    count: Optional[int] = Field(default=1, ge=1)
-    resources: Optional[Dict[str, Any]] = Field(
-        default=None,
-        description="{ cpu_limit?: string, memory_limit?: string, disk_limit?: string }",
-    )
+    """Properly typed request body for starting container instances"""
+    image: str = Field(..., description="Docker image name (e.g., 'nginx:latest')")
+    image_url: str = Field(..., description="URL for orchestrator to download the image")
+    min_replicas: int = Field(default=1, ge=1, description="Minimum number of container replicas")
+    max_replicas: int = Field(default=5, ge=1, description="Maximum number of container replicas")
+    resources: ResourceRequirements = Field(..., description="Resource requirements for containers")
+    env: Dict[str, str] = Field(default_factory=dict, description="Environment variables")
+    ports: List[PortMapping] = Field(default_factory=list, description="Port mappings")
+
+    # Legacy support - keeping count for backward compatibility
+    count: Optional[int] = Field(default=None, ge=1, description="Number of containers to start (legacy field)")
 
 class StopBody(BaseModel):
     instanceId: str
@@ -569,26 +586,31 @@ def get_images():
 def start_container(body: StartBody):
     """Starts or reuses a container for a given image with env/ports/resources"""
     try:
-        # For now, we'll use the existing start logic
-        # This endpoint should be enhanced to handle reuse logic
-        image = body.resources.get("image", "nginx:alpine") if body.resources else "nginx:alpine"
-        count = body.count or 1
+        # Use the typed fields from the new StartBody structure
+        image = body.image
+        count = body.count or body.min_replicas
 
+        # Convert typed resources to docker format
         resources: Dict[str, Any] = {}
         if body.resources:
-            mem = body.resources.get("memory_limit")
-            cpu = body.resources.get("cpu_limit")
-            if mem:
-                resources["mem_limit"] = mem
-            if cpu is not None:
-                try:
-                    resources["nano_cpus"] = int(float(cpu) * 1_000_000_000)
-                except (ValueError, TypeError):
-                    pass
+            # Convert memory (e.g., "512Mi" -> mem_limit)
+            resources["mem_limit"] = body.resources.memory
+
+            # Convert CPU (e.g., "1.0" -> nano_cpus)
+            try:
+                resources["nano_cpus"] = int(float(body.resources.cpu) * 1_000_000_000)
+            except (ValueError, TypeError):
+                # ignore if unparsable; manager will run without CPU limit
+                pass
+
+        # Convert ports to docker format
+        ports: Dict[str, Any] = {}
+        for port_mapping in body.ports:
+            ports[f"{port_mapping.container}/tcp"] = port_mapping.host
 
         started_ids: List[str] = []
         for _ in range(count):
-            info = manager.create_container(image, env={}, ports={}, resources=resources)
+            info = manager.create_container(image, env=body.env, ports=ports, resources=resources)
             started_ids.append(info["id"])
 
         # Return the format expected by the prompt
@@ -719,30 +741,34 @@ def instance_health(instanceId: str):
 )
 def start_image(imageId: str, body: StartBody):
     try:
-        count = body.count or 1
+        # Use count if specified, otherwise use min_replicas from typed structure
+        count = body.count or body.min_replicas
 
+        # Convert typed resources to docker format
         resources: Dict[str, Any] = {}
         if body.resources:
-            # map contract -> docker kwargs used by ContainerManager
-            mem = body.resources.get("memory_limit")
-            cpu = body.resources.get("cpu_limit")
-            if mem:
-                resources["mem_limit"] = mem
-            if cpu is not None:
-                # convert fractional CPUs (e.g. "0.25") to nano_cpus (int)
-                try:
-                    resources["nano_cpus"] = int(float(cpu) * 1_000_000_000)
-                except (ValueError, TypeError):
-                    # ignore if unparsable; manager will run without CPU limit
-                    pass
+            # Convert memory (e.g., "512Mi" -> mem_limit)
+            resources["mem_limit"] = body.resources.memory
+
+            # Convert CPU (e.g., "0.25" -> nano_cpus)
+            try:
+                resources["nano_cpus"] = int(float(body.resources.cpu) * 1_000_000_000)
+            except (ValueError, TypeError):
+                # ignore if unparsable; manager will run without CPU limit
+                pass
             # disk_limit is accepted by contract but not enforced (no-op)
+
+        # Convert ports to docker format
+        ports: Dict[str, Any] = {}
+        for port_mapping in body.ports:
+            ports[f"{port_mapping.container}/tcp"] = port_mapping.host
 
         started_ids: List[str] = []
         failed_count = 0
 
         for i in range(count):
             try:
-                info = manager.create_container(imageId, env={}, ports={}, resources=resources)
+                info = manager.create_container(imageId, env=body.env, ports=ports, resources=resources)
                 started_ids.append(info["id"])
             except Exception as e:
                 failed_count += 1

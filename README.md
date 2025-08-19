@@ -239,9 +239,6 @@ POSTGRES_URL=postgresql://user:pass@host:5432/db
 HEALTH_INTERVAL_SECONDS=60
 HEALTH_RETENTION_DAYS=7
 
-# Logging
-LOG_FILE=/app/logs/combined.log
-
 # Service Discovery
 REGISTRY_URL=http://registry:8000/registry/endpoints
 REGISTRY_API_KEY=your-api-key
