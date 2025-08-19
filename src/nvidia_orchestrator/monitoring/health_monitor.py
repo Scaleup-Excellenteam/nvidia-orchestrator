@@ -178,19 +178,20 @@ def sample_once(manager: ContainerManager, store: PostgresStore) -> None:
             state_tracker.update_state(cid, current_state)
             logger.info(f"Container {name} ({cid}) state changed: {previous_state} -> {current_state}")
 
-            # Record state change event
+            # Record a compatible lifecycle event (schema allows: create/start/stop/remove)
             try:
+                mapped_event = "start" if current_state == "running" else "stop"
                 store.record_event({
-                    "event_type": "state_change",
                     "image": image,
                     "container_id": cid,
-                    "details": {
-                        "from_state": previous_state,
-                        "to_state": current_state
-                    }
+                    "name": name,
+                    "host": socket.gethostname(),
+                    "ports": {},
+                    "status": current_state,
+                    "event": mapped_event,
                 })
             except Exception as e:
-                logger.error(f"Failed to record state change event: {e}")
+                logger.error(f"Failed to record lifecycle event on state change: {e}")
 
         logger.debug(f"Checking health for container {cid} ({name}) - running: {running}")
 

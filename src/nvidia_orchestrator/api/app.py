@@ -591,29 +591,6 @@ def start_container(body: StartBody):
             info = manager.create_container(image, env={}, ports={}, resources=resources)
             started_ids.append(info["id"])
 
-        # Save the desired state in the database
-        try:
-            # Convert resources to the format expected by register_desired_state
-            db_resources = {}
-            if resources.get("mem_limit"):
-                db_resources["memory"] = resources["mem_limit"]
-            if resources.get("nano_cpus"):
-                db_resources["cpu"] = str(resources["nano_cpus"] / 1_000_000_000)
-            
-            # Register the desired state for this image
-            manager.register_desired_state(
-                image=image,
-                min_replicas=count,
-                max_replicas=count,
-                resources=db_resources,
-                env={},
-                ports={}
-            )
-            logger.info(f"Desired state saved to database for image: {image}, count: {count}")
-        except Exception as e:
-            logger.warning(f"Failed to save desired state to database for {image}: {e}")
-            # Don't fail the container creation if DB save fails
-
         # Return the format expected by the prompt
         return {
             "ok": True,

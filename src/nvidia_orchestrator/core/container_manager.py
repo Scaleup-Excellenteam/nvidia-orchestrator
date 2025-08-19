@@ -87,7 +87,7 @@ class ContainerManager:
             logger.warning("PostgreSQL store disabled - events will not be persisted")
 
     def _init_docker_client(self, max_retries: int = 3) -> None:
-        """Initialize Docker client with retry logic"""
+        """Initialize Docker client with retry logic. Non-fatal on failure."""
         for attempt in range(max_retries):
             try:
                 self.client = docker.from_env()
@@ -101,7 +101,9 @@ class ContainerManager:
                     time.sleep(2 ** attempt)  # Exponential backoff
                 else:
                     logger.error(f"Failed to initialize Docker client after {max_retries} attempts: {e}")
-                    raise RuntimeError(f"Cannot connect to Docker daemon: {e}")
+                    # Leave self.client as None; defer errors to call sites
+                    self.client = None
+                    return
 
     def _ensure_docker_client(self) -> None:
         """Ensure Docker client is available, reinitialize if needed"""
