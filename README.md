@@ -1,289 +1,273 @@
-# Team 3 - NVIDIA Orchestrator
+# NVIDIA Orchestrator
 
-A production-ready container orchestration system built with FastAPI, Docker, and PostgreSQL. This system provides lightweight Kubernetes-like functionality for managing containers, monitoring health, and enabling service discovery.
+A container orchestration system for managing Docker containers with health monitoring and PostgreSQL storage.
 
-## 🎯 Project Overview
+## 🏗️ Project Structure
 
-This system is a lightweight alternative to Kubernetes for running and managing containers. It allows customers to:
-- Upload and manage Docker images
-- Run containers with resource limits
-- Monitor container health in real-time
-- Balance load across containers
-- Discover services automatically
-- Handle billing and usage tracking
-
-## 🏗️ System Architecture
+This project follows the **src-layout** pattern for Python packages:
 
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Team 1 - UI   │    │ Team 2 - Load  │    │ Team 4 -       │
-│   & API         │◄──►│ Balancer &      │◄──►│ Billing        │
-│                 │    │ Service Disc.   │    │                 │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
-         │                       │                       │
-         ▼                       ▼                       ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    TEAM 3 - ORCHESTRATOR                        │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
-│  │   FastAPI App   │  │ Container Mgr   │  │ Health Monitor  │ │
-│  │   (app.py)      │  │ (container_     │  │ (health_        │ │
-│  │                 │  │  manager.py)    │  │  monitor.py)    │ │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘ │
-│  ┌─────────────────┐  ┌─────────────────┐                      │
-│  │ PostgreSQL      │  │ Docker Engine   │                      │
-│  │ Store           │  │ Integration     │                      │
-│  │ (postgres_      │  │                 │                      │
-│  │  store.py)      │  └─────────────────┘                      │
-│  └─────────────────┘                                            │
-└─────────────────────────────────────────────────────────────────┘
+nvidia-orchestrator/
+├── src/                        # Source code (src-layout)
+│   └── nvidia_orchestrator/    # Main package
+│       ├── __init__.py        # Package initialization
+│       ├── api/               # REST API module
+│       │   ├── __init__.py
+│       │   └── app.py         # FastAPI application
+│       ├── core/              # Core business logic
+│       │   ├── __init__.py
+│       │   └── container_manager.py
+│       ├── storage/           # Data storage layer
+│       │   ├── __init__.py
+│       │   └── postgres_store.py
+│       ├── monitoring/        # Health monitoring
+│       │   ├── __init__.py
+│       │   └── health_monitor.py
+│       ├── utils/             # Utilities
+│       │   ├── __init__.py
+│       │   └── logger.py
+│       └── cli.py             # Command-line interface
+├── tests/                      # Test suite
+│   ├── unit/                  # Unit tests
+│   ├── integration/           # Integration tests
+│   └── fixtures/              # Test fixtures
+├── docs/                       # Documentation
+│   ├── README_API.md          # API documentation
+│   ├── README_APP.md          # Application guide
+│   └── README_CONTAINER_SYSTEM.md
+├── scripts/                    # Utility scripts
+│   ├── start.sh               # Startup script
+│   └── db-init.sql            # Database schema
+├── pyproject.toml             # Package configuration
+├── Dockerfile                 # Container image
+├── docker-compose.yml         # Multi-container setup
+└── README.md                  # This file
 ```
 
 ## 🚀 Quick Start
 
-### Prerequisites
-- Docker Desktop running
-- Port 8000 available
-- Python 3.11+ (for local testing)
+### Installation
 
-### 1. Start the System
+#### From Source (Development)
+
 ```bash
+# Clone the repository
+git clone https://github.com/team3/nvidia-orchestrator.git
+cd nvidia-orchestrator
+
+# Install in development mode
+pip install -e .
+
+# Or with development dependencies
+pip install -e ".[dev]"
+```
+
+#### Using pip
+
+```bash
+# Install from package
+pip install nvidia-orchestrator
+```
+
+### Running with Docker Compose
+
+```bash
+# Start all services
 docker-compose up -d
-```
 
-### 2. Wait for Startup
-```bash
-docker-compose logs -f api
-```
-Look for: `🎉 All critical components validated successfully!`
-
-### 3. Test the System
-```bash
-python test_system.py
-```
-Expected: `🎉 All tests passed! Your system is ready for tomorrow!`
-
-## 📋 Core Components
-
-### **1. FastAPI Application (`app.py`)**
-- **Main API server** handling all HTTP requests
-- **Service discovery** registration and health checks
-- **Container lifecycle** management endpoints
-- **System monitoring** and resource reporting
-
-### **2. Container Manager (`container_manager.py`)**
-- **Docker integration** for container operations
-- **Resource management** (CPU, memory limits)
-- **Container lifecycle** (create, start, stop, delete)
-- **Health monitoring** integration
-
-### **3. Health Monitor (`health_monitor.py`)**
-- **Background process** collecting container metrics
-- **Real-time monitoring** of CPU, memory, disk usage
-- **Health status classification** (healthy, warning, critical)
-- **Database persistence** for historical data
-
-### **4. PostgreSQL Store (`postgres_store.py`)**
-- **Event logging** for all container operations
-- **Health snapshots** for monitoring data
-- **Desired state** management for containers
-- **Data persistence** for billing and analytics
-
-## 🔧 API Endpoints
-
-### **Health & Status**
-- `GET /health` - Basic service health
-- `GET /health/detailed` - Component-by-component health
-- `GET /system/resources` - Available system resources
-
-### **Container Management**
-- `GET /containers` - List all managed containers
-- `GET /images` - Show desired state and container counts
-- `POST /containers/{image}/start` - Start containers
-- `POST /containers/{image}/stop` - Stop containers
-- `DELETE /containers/{id}` - Delete containers
-
-### **Container Health**
-- `GET /containers/instances/{id}/health` - Container health status
-- `GET /test/integration` - Complete system validation
-
-### **Service Discovery**
-- `POST /registry/endpoints` - Register service endpoint
-- `PUT /registry/endpoints/{id}/status` - Update endpoint status
-- `DELETE /registry/endpoints/{id}` - Remove endpoint
-
-## 🧪 Testing
-
-### **Comprehensive Testing**
-```bash
-python test_system.py
-```
-
-### **Individual Endpoint Testing**
-```bash
-# Health check
-curl http://localhost:8000/health
-
-# System resources
-curl http://localhost:8000/system/resources
-
-# List containers
-curl http://localhost:8000/containers
-
-# Integration test
-curl http://localhost:8000/test/integration
-```
-
-### **Container Lifecycle Testing**
-```bash
-# Start a test container
-curl -X POST http://localhost:8000/containers/nginx:alpine/start \
-  -H "Content-Type: application/json" \
-  -d '{"count": 1, "resources": {"cpu_limit": "0.1", "memory_limit": "128m"}}'
-```
-
-## 📊 Monitoring & Health
-
-### **Health Status Levels**
-- **🟢 Healthy** - CPU < 75%, Memory < 75%
-- **🟡 Warning** - CPU 75-90%, Memory 75-90%
-- **🔴 Critical** - CPU > 90%, Memory > 90%
-- **⚫ Stopped** - Container not running
-
-### **Metrics Collected**
-- **CPU Usage** - Percentage of allocated CPU
-- **Memory Usage** - Percentage of allocated memory
-- **Disk Usage** - System disk utilization
-- **Container Status** - Running/stopped state
-- **Network Ports** - Host port mappings
-
-## 🔄 Data Flow
-
-### **1. Container Creation**
-```
-UI Request → FastAPI → Container Manager → Docker → Health Monitor → Database
-```
-
-### **2. Health Monitoring**
-```
-Health Monitor → Container Stats → Health Classification → Database → API Response
-```
-
-### **3. Service Discovery**
-```
-Container Start → Registry Update → Service Discovery → Load Balancer
-```
-
-## 🚨 Troubleshooting
-
-### **Common Issues**
-
-#### **Service Won't Start**
-```bash
-# Check logs
-docker-compose logs -f api
-
-# Check health
-curl http://localhost:8000/health/detailed
-```
-
-#### **Container Creation Fails**
-```bash
-# Check Docker
-docker ps
-docker system df
-
-# Check system resources
-curl http://localhost:8000/system/resources
-```
-
-#### **Database Connection Issues**
-```bash
-# Check PostgreSQL
-docker-compose logs postgres
-
-# Restart database
-docker-compose restart postgres
-```
-
-### **Debug Commands**
-```bash
-# View all containers
-docker ps --filter "label=managed-by"
-
-# Check system logs
+# View logs
 docker-compose logs -f
 
-# Restart service
-docker-compose restart api
+# Stop services
+docker-compose down
 ```
 
-## 📈 Performance & Scaling
+### Running Locally
 
-### **Resource Limits**
-- **CPU**: Fractional cores (e.g., "0.25" = 25% of one core)
-- **Memory**: Standard Docker format (e.g., "512m", "1g")
-- **Disk**: Currently not enforced (Docker limitation)
+#### Start the API Server
 
-### **Scaling Capabilities**
-- **Horizontal**: Multiple containers per image
-- **Vertical**: Resource limit adjustments
-- **Auto-scaling**: Based on health and resource usage
+```bash
+# Using the CLI
+nvidia-orchestrator api --host 0.0.0.0 --port 8000
 
-## 🔐 Security & Access
+# Or using Python module
+python -m nvidia_orchestrator.api.app
 
-### **Current Implementation**
-- **Docker socket access** for container management
-- **PostgreSQL authentication** via environment variables
-- **CORS enabled** for web UI integration
+# Or programmatically
+from nvidia_orchestrator.api import run_server
+run_server()
+```
 
-### **Production Considerations**
-- **API authentication** (to be implemented)
-- **Docker socket security** (consider Docker-in-Docker)
-- **Network isolation** (consider custom Docker networks)
+#### Start the Health Monitor
 
-## 📚 Documentation Files
+```bash
+# Using the CLI
+nvidia-orchestrator monitor
 
-- **[README_APP.md](README_APP.md)** - Detailed `app.py` function documentation
-- **[README_CONTAINER_SYSTEM.md](README_CONTAINER_SYSTEM.md)** - Container management system
-- **[README_API.md](README_API.md)** - API specification and contracts
+# Or using Python module
+python -m nvidia_orchestrator.monitoring.health_monitor
+```
 
-## 🎯 Ready for Integration
+## 📦 Package Usage
 
-**Your system is production-ready for tomorrow's testing:**
+### As a Library
 
-✅ **All endpoints working** and tested  
-✅ **Health monitoring active** and collecting data  
-✅ **Container management** fully functional  
-✅ **Database integration** working smoothly  
-✅ **Error handling** robust and professional  
-✅ **Comprehensive testing** completed  
+```python
+from nvidia_orchestrator import ContainerManager, PostgresStore, get_logger
 
-## 🤝 Team Integration
+# Initialize components
+logger = get_logger("my-app")
+manager = ContainerManager()
+store = PostgresStore()
 
-### **For Team 1 (UI & API)**
-- Connect to port 8000
-- Use `/containers` and `/images` endpoints
-- Monitor system health via `/health/detailed`
+# Create a container
+info = manager.create_container(
+    image="nginx:alpine",
+    env={"KEY": "value"},
+    ports={"80/tcp": 8080},
+    resources={"memory_limit": "512m", "cpu_limit": "0.5"}
+)
 
-### **For Team 2 (Load Balancer)**
-- Get container health via `/containers/instances/{id}/health`
-- Discover services via registry endpoints
-- Monitor system resources via `/system/resources`
+# List containers
+containers = manager.list_managed_containers()
 
-### **For Team 4 (Billing)**
-- Collect usage data via health endpoints
-- Monitor container counts and resource usage
-- Access historical data via database
+# Store events
+store.record_event({
+    "image": "nginx:alpine",
+    "container_id": info["id"],
+    "event": "create",
+    "status": "running"
+})
+```
 
-### **For Team 5 (DevOps)**
-- Run integration tests via `/test/integration`
-- Monitor system health and performance
-- Validate all component interactions
+### CLI Commands
 
----
+```bash
+# Show version
+nvidia-orchestrator version
 
-**🎉 Congratulations! You've built a professional-grade container orchestration system!**
+# Run API server
+nvidia-orchestrator api --host 0.0.0.0 --port 8000
+
+# Run health monitor
+nvidia-orchestrator monitor
+
+# Get help
+nvidia-orchestrator --help
+```
+
+## 🛠️ Development
+
+### Setup Development Environment
+
+```bash
+# Install development dependencies
+pip install -e ".[dev]"
+
+# Run tests
+pytest
+
+# Run linters
+ruff check src/
+black --check src/
+
+# Format code
+black src/
+ruff check --fix src/
+
+# Type checking
+mypy src/
+```
+
+### Running Tests
+
+```bash
+# All tests
+pytest
+
+# Unit tests only
+pytest tests/unit/
+
+# Integration tests
+pytest tests/integration/
+
+# With coverage
+pytest --cov=nvidia_orchestrator --cov-report=html
+```
+
+## 📚 API Documentation
+
+The orchestrator provides a REST API for container management. See [docs/README_API.md](docs/README_API.md) for detailed API documentation.
+
+### Key Endpoints
+
+- `GET /health` - Health check
+- `GET /containers` - List all containers
+- `POST /containers/{imageId}/start` - Start containers
+- `POST /containers/{imageId}/stop` - Stop a container
+- `DELETE /containers/{idOrName}` - Delete a container
+- `GET /containers/instances/{instanceId}/health` - Get container health
+
+## 🐳 Container Management
+
+The system manages Docker containers with:
+- **Automatic port mapping** - Detects and maps exposed ports
+- **Resource limits** - CPU and memory constraints
+- **Health monitoring** - Continuous health checks
+- **Event tracking** - PostgreSQL-based event storage
+- **Service discovery** - Built-in registry system
+
+See [docs/README_CONTAINER_SYSTEM.md](docs/README_CONTAINER_SYSTEM.md) for details.
+
+## 📊 Health Monitoring
+
+The health monitor runs continuously to:
+- Collect CPU, memory, and disk usage metrics
+- Store snapshots in PostgreSQL
+- Determine health status (healthy/warning/critical/stopped)
+- Prune old data based on retention policy
+
+## 🔧 Configuration
+
+Environment variables:
+
+```bash
+# PostgreSQL
+POSTGRES_URL=postgresql://user:pass@host:5432/db
+
+# Monitoring
+HEALTH_INTERVAL_SECONDS=60
+HEALTH_RETENTION_DAYS=7
+
+# Logging
+LOG_FILE=/app/logs/combined.log
+
+# Service Discovery
+REGISTRY_URL=http://registry:8000/registry/endpoints
+REGISTRY_API_KEY=your-api-key
+```
+
+## 📄 License
+
+MIT License - see LICENSE file for details.
+
+## 👥 Team
+
+Team 3 - NVIDIA Orchestrator Project
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📖 Additional Documentation
+
+- [API Reference](docs/README_API.md)
+- [Application Guide](docs/README_APP.md)
+- [Container System](docs/README_CONTAINER_SYSTEM.md)
 
 
 

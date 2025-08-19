@@ -1,10 +1,14 @@
 from __future__ import annotations
-import os, time, socket, shutil, logging
-from typing import Dict, Any, List, Optional
 
-from container_manager import ContainerManager
-from postgres_store import PostgresStore
-from logger import logger
+import os
+import shutil
+import socket
+import time
+from typing import Any, Dict, List, Optional
+
+from nvidia_orchestrator.core.container_manager import ContainerManager
+from nvidia_orchestrator.storage.postgres_store import PostgresStore
+from nvidia_orchestrator.utils.logger import logger
 
 INTERVAL_SEC = int(os.getenv("HEALTH_INTERVAL_SECONDS", "60"))
 RETENTION_DAYS = int(os.getenv("HEALTH_RETENTION_DAYS", "7"))
@@ -57,12 +61,12 @@ def sample_once(manager: ContainerManager, store: PostgresStore) -> None:
         return
 
     logger.debug("Starting health snapshot collection")
-    
+
     # get all containers managed by this orchestrator (label = managed-by)
     instances: List[Dict[str, Any]] = manager.list_managed_containers()
     host = socket.gethostname()
     disk = _disk_percent() or 0.0
-    
+
     logger.info(f"Collecting health data for {len(instances)} containers on {host}")
 
     for s in instances:
@@ -107,7 +111,7 @@ def sample_once(manager: ContainerManager, store: PostgresStore) -> None:
             })
         except Exception as e:
             logger.error(f"Failed to record health snapshot for {cid}: {e}")
-    
+
     logger.info(f"Health snapshot collection completed for {len(instances)} containers")
 
 def run_forever() -> None:
@@ -132,7 +136,7 @@ def run_forever() -> None:
                     logger.error(f"Failed to prune old health records: {e}")
         except Exception as e:
             logger.exception("Health monitor loop error: %s", e)
-        
+
         # sleep the remaining time in the minute
         elapsed = time.time() - t0
         to_sleep = max(1.0, INTERVAL_SEC - elapsed)

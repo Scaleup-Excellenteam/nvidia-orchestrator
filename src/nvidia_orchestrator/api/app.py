@@ -1,21 +1,20 @@
 from __future__ import annotations
 
-from typing import Dict, Optional, Any, List, Literal
-from docker.errors import NotFound, APIError
+import asyncio
+import os
+import threading
+from datetime import datetime, timezone
+from enum import Enum
+from typing import Any, Dict, List, Literal, Optional
+
+import httpx
+import requests
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from container_manager import ContainerManager
-import requests
-from enum import Enum
-from datetime import datetime, timezone
-import threading
-import os
-import asyncio
-from datetime import datetime, timezone
-import httpx
-from logger import logger
+from nvidia_orchestrator.core.container_manager import ContainerManager
+from nvidia_orchestrator.utils.logger import logger
 
 app = FastAPI(title="Team 3 Orchestrator API", version="1.0.0")
 
@@ -35,7 +34,7 @@ async def global_exception_handler(request, exc):
 
 manager = ContainerManager()
 
-## this section for service 
+## this section for service
 @app.get("/health")
 def health():
     """Basic health check - just returns OK if the service is running"""
@@ -50,7 +49,7 @@ def health_detailed():
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "components": {}
         }
-        
+
         # Check Docker connection
         try:
             manager.client.ping()
@@ -58,10 +57,10 @@ def health_detailed():
         except Exception as e:
             health_status["components"]["docker"] = {"status": "ERROR", "message": str(e)}
             health_status["status"] = "DEGRADED"
-        
+
         # Check PostgreSQL connection
         try:
-            from postgres_store import PostgresStore
+            from nvidia_orchestrator.storage.postgres_store import PostgresStore
             store = PostgresStore()
             if store.enabled:
                 health_status["components"]["postgresql"] = {"status": "OK", "message": "Connected"}
@@ -70,18 +69,18 @@ def health_detailed():
         except Exception as e:
             health_status["components"]["postgresql"] = {"status": "ERROR", "message": str(e)}
             health_status["status"] = "DEGRADED"
-        
+
         # Check container manager
         try:
             managed_containers = manager.list_managed_containers()
             health_status["components"]["container_manager"] = {
-                "status": "OK", 
+                "status": "OK",
                 "message": f"Managing {len(managed_containers)} containers"
             }
         except Exception as e:
             health_status["components"]["container_manager"] = {"status": "ERROR", "message": str(e)}
             health_status["status"] = "DEGRADED"
-        
+
         # Check system resources
         try:
             import psutil
@@ -96,9 +95,9 @@ def health_detailed():
             health_status["components"]["system_resources"] = {"status": "WARNING", "message": "psutil not available"}
         except Exception as e:
             health_status["components"]["system_resources"] = {"status": "ERROR", "message": str(e)}
-        
+
         return health_status
-        
+
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         return {
@@ -116,7 +115,7 @@ def test_integration():
             "tests": {},
             "overall_status": "PASSED"
         }
-        
+
         # Test 1: Docker connection
         try:
             manager.client.ping()
@@ -124,21 +123,21 @@ def test_integration():
         except Exception as e:
             test_results["tests"]["docker_connection"] = {"status": "FAIL", "message": str(e)}
             test_results["overall_status"] = "FAILED"
-        
+
         # Test 2: Container listing
         try:
             containers = manager.list_managed_containers()
             test_results["tests"]["container_listing"] = {
-                "status": "PASS", 
+                "status": "PASS",
                 "message": f"Found {len(containers)} managed containers"
             }
         except Exception as e:
             test_results["tests"]["container_listing"] = {"status": "FAIL", "message": str(e)}
             test_results["overall_status"] = "FAILED"
-        
+
         # Test 3: PostgreSQL connection
         try:
-            from postgres_store import PostgresStore
+            from nvidia_orchestrator.storage.postgres_store import PostgresStore
             store = PostgresStore()
             if store.enabled:
                 test_results["tests"]["postgresql"] = {"status": "PASS", "message": "Database connected"}
@@ -147,39 +146,39 @@ def test_integration():
         except Exception as e:
             test_results["tests"]["postgresql"] = {"status": "FAIL", "message": str(e)}
             test_results["overall_status"] = "FAILED"
-        
+
         # Test 4: System resources
         try:
             import psutil
             cpu_count = psutil.cpu_count()
             memory = psutil.virtual_memory()
             test_results["tests"]["system_resources"] = {
-                "status": "PASS", 
+                "status": "PASS",
                 "message": f"{cpu_count} CPU cores, {round(memory.total / (1024**3), 1)}GB RAM"
             }
         except ImportError:
             test_results["tests"]["system_resources"] = {"status": "WARNING", "message": "psutil not available"}
         except Exception as e:
             test_results["tests"]["system_resources"] = {"status": "FAIL", "message": str(e)}
-        
+
         # Test 5: Health monitoring
         try:
             # Check if health monitor is working by looking for recent health data
-            from postgres_store import PostgresStore
+            from nvidia_orchestrator.storage.postgres_store import PostgresStore
             store = PostgresStore()
             if store.enabled:
                 recent_health = store.list_recent_health(limit=5)
                 test_results["tests"]["health_monitoring"] = {
-                    "status": "PASS", 
+                    "status": "PASS",
                     "message": f"Health data available: {len(recent_health)} recent records"
                 }
             else:
                 test_results["tests"]["health_monitoring"] = {"status": "WARNING", "message": "Database disabled"}
         except Exception as e:
             test_results["tests"]["health_monitoring"] = {"status": "FAIL", "message": str(e)}
-        
+
         return test_results
-        
+
     except Exception as e:
         logger.error(f"Integration test failed: {e}")
         return {
@@ -193,16 +192,16 @@ def get_system_resources():
     """Returns available system resources for scaling decisions"""
     try:
         import psutil
-        
+
         # Get system resource information
         cpu_count = psutil.cpu_count()
         cpu_percent = psutil.cpu_percent(interval=1)
         memory = psutil.virtual_memory()
         disk = psutil.disk_usage('/')
-        
+
         # Get Docker container resource usage
         docker_usage = manager.get_system_resource_usage()
-        
+
         return {
             "system": {
                 "cpu": {
@@ -238,10 +237,10 @@ def get_system_resources():
         logger.error(f"Failed to get system resources: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve system resources: {str(e)}")
 
-REGISTRY_BASE = os.getenv("REGISTRY_BASE", "http://localhost:7000")  
-SERVICE_ID    = os.getenv("SERVICE_ID", "orchestrator-1")            
-SERVICE_KIND  = os.getenv("SERVICE_KIND", "orchestrator")            
-PUBLIC_HOST   = os.getenv("PUBLIC_HOST", "127.0.0.1")                
+REGISTRY_BASE = os.getenv("REGISTRY_BASE", "http://localhost:7000")
+SERVICE_ID    = os.getenv("SERVICE_ID", "orchestrator-1")
+SERVICE_KIND  = os.getenv("SERVICE_KIND", "orchestrator")
+PUBLIC_HOST   = os.getenv("PUBLIC_HOST", "127.0.0.1")
 PUBLIC_PORT   = int(os.getenv("PUBLIC_PORT", "8000"))
 HEALTH_PATH   = os.getenv("HEALTH_PATH", "/health")
 
@@ -249,25 +248,25 @@ def _health_url() -> str:
     return f"http://{PUBLIC_HOST}:{PUBLIC_PORT}{HEALTH_PATH}"
 
 # --- רישום אוטומטי בעת עליית השרת ---
-REGISTRY_URL = os.getenv("REGISTRY_URL")  
-REGISTRY_API_KEY = os.getenv("REGISTRY_API_KEY")  
+REGISTRY_URL = os.getenv("REGISTRY_URL")
+REGISTRY_API_KEY = os.getenv("REGISTRY_API_KEY")
 
 @app.on_event("startup")
 async def do_register():
     """Register with service discovery and validate system startup"""
     logger.info("Starting Team 3 Orchestrator...")
-    
+
     # Validate core system components
     startup_validation = await validate_startup()
     if not startup_validation["success"]:
         logger.error(f"Startup validation failed: {startup_validation['errors']}")
         # Continue startup but log the issues
-    
+
     # Register with service discovery if configured
     if not REGISTRY_URL:
         logger.info("[registry] skipped: REGISTRY_URL not set")
         return
-    
+
     payload = {
         "id": "orchestrator-1",
         "image_id": "orchestrator",
@@ -290,13 +289,13 @@ async def do_register():
         except Exception as e:
             logger.warning(f"[registry] error: {e}")
         await asyncio.sleep(2 ** i)  # Exponential backoff
-    
+
     logger.error("[registry] gave up registering after retries")
 
 async def validate_startup() -> Dict[str, Any]:
     """Validate all system components during startup"""
     validation = {"success": True, "errors": [], "warnings": []}
-    
+
     # Check Docker connection
     try:
         manager.client.ping()
@@ -305,10 +304,10 @@ async def validate_startup() -> Dict[str, Any]:
         validation["success"] = False
         validation["errors"].append(f"Docker connection failed: {e}")
         logger.error(f"❌ Docker connection failed: {e}")
-    
+
     # Check PostgreSQL connection
     try:
-        from postgres_store import PostgresStore
+        from nvidia_orchestrator.storage.postgres_store import PostgresStore
         store = PostgresStore()
         if store.enabled:
             logger.info("✅ PostgreSQL connection validated")
@@ -318,7 +317,7 @@ async def validate_startup() -> Dict[str, Any]:
     except Exception as e:
         validation["warnings"].append(f"PostgreSQL check failed: {e}")
         logger.warning(f"⚠️ PostgreSQL check failed: {e}")
-    
+
     # Check container manager
     try:
         managed_containers = manager.list_managed_containers()
@@ -327,7 +326,7 @@ async def validate_startup() -> Dict[str, Any]:
         validation["success"] = False
         validation["errors"].append(f"Container manager failed: {e}")
         logger.error(f"❌ Container manager failed: {e}")
-    
+
     # Check system resources
     try:
         import psutil
@@ -340,12 +339,12 @@ async def validate_startup() -> Dict[str, Any]:
     except Exception as e:
         validation["warnings"].append(f"System resource check failed: {e}")
         logger.warning(f"⚠️ System resource check failed: {e}")
-    
+
     if validation["success"]:
         logger.info("🎉 All critical components validated successfully!")
     else:
         logger.error(f"🚨 Startup validation failed with {len(validation['errors'])} errors")
-    
+
     return validation
 
 # -------------------------------------------------------------------
@@ -547,24 +546,24 @@ def get_images():
     """Returns current desired state and running container counts from PostgresStore"""
     try:
         # Import PostgresStore here to avoid circular imports
-        from postgres_store import PostgresStore
+        from nvidia_orchestrator.storage.postgres_store import PostgresStore
         store = PostgresStore()
-        
+
         if store.enabled:
             desired_images = store.list_desired()
-            
+
             # Enhance with current container counts
             enhanced_images = []
             for img in desired_images:
                 image_name = img.get("image", "")
                 current_instances = manager.list_instances_for_image(image_name)
                 running_count = len([i for i in current_instances if i.get("state") == "running"])
-                
+
                 enhanced_img = img.copy()
                 enhanced_img["current_running"] = running_count
                 enhanced_img["total_instances"] = len(current_instances)
                 enhanced_images.append(enhanced_img)
-            
+
             return {"images": enhanced_images}
         return {"images": []}
     except Exception as e:
@@ -579,7 +578,7 @@ def start_container(body: StartBody):
         # This endpoint should be enhanced to handle reuse logic
         image = body.resources.get("image", "nginx:alpine") if body.resources else "nginx:alpine"
         count = body.count or 1
-        
+
         resources: Dict[str, Any] = {}
         if body.resources:
             mem = body.resources.get("memory_limit")
@@ -591,12 +590,12 @@ def start_container(body: StartBody):
                     resources["nano_cpus"] = int(float(cpu) * 1_000_000_000)
                 except (ValueError, TypeError):
                     pass
-        
+
         started_ids: List[str] = []
         for _ in range(count):
             info = manager.create_container(image, env={}, ports={}, resources=resources)
             started_ids.append(info["id"])
-        
+
         # Return the format expected by the prompt
         return {
             "ok": True,
@@ -616,7 +615,7 @@ def get_all_containers():
     try:
         # Get all containers managed by this orchestrator
         all_containers = manager.list_managed_containers()
-        
+
         # Format response for other teams
         formatted_containers = []
         for container in all_containers:
@@ -629,7 +628,7 @@ def get_all_containers():
                 "created_at": container.get("created_at"),
                 "resources": container.get("resources", {})
             })
-        
+
         return {"containers": formatted_containers, "total": len(formatted_containers)}
     except Exception as e:
         logger.error(f"Failed to get all containers: {e}")
@@ -661,7 +660,7 @@ def instance_health(instanceId: str):
 
         c = res["container"]
         stats = res["stats"]
-        
+
         # Safely reload container status
         try:
             c.reload()
@@ -675,7 +674,7 @@ def instance_health(instanceId: str):
             cpu_p = _calc_cpu_percent(stats) or 0.0
             mem_p = _calc_mem_percent(stats) or 0.0
             disk_p = 0.0  # docker stats lacks reliable per-container disk % by default
-        except Exception as e:
+        except Exception:
             # If stats calculation fails, provide default values
             cpu_p = 0.0
             mem_p = 0.0
@@ -708,7 +707,7 @@ def instance_health(instanceId: str):
             body["errors"] = errs
 
         return body
-        
+
     except HTTPException:
         # Re-raise HTTP exceptions as-is
         raise
@@ -744,7 +743,7 @@ def start_image(imageId: str, body: StartBody):
 
         started_ids: List[str] = []
         failed_count = 0
-        
+
         for i in range(count):
             try:
                 info = manager.create_container(imageId, env={}, ports={}, resources=resources)
@@ -753,7 +752,7 @@ def start_image(imageId: str, body: StartBody):
                 failed_count += 1
                 # Log the failure but continue with other containers
                 logger.error(f"Failed to start container {i+1}/{count} for image {imageId}: {e}")
-        
+
         if failed_count > 0:
             if len(started_ids) == 0:
                 # All containers failed
@@ -761,9 +760,9 @@ def start_image(imageId: str, body: StartBody):
             else:
                 # Some containers failed, but some succeeded
                 logger.warning(f"Started {len(started_ids)}/{count} containers for image {imageId}. {failed_count} failed.")
-        
+
         return {"started": started_ids}
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -919,6 +918,10 @@ def set_endpoint_status(endpoint_id: str, status: StatusEnum):
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Endpoint '{endpoint_id}' not found")
 
-if __name__ == "__main__":
+def run_server() -> None:
+    """Run the API server."""
     import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("nvidia_orchestrator.api.app:app", host="0.0.0.0", port=8000, reload=True)
+
+if __name__ == "__main__":
+    run_server()

@@ -1,13 +1,15 @@
 from __future__ import annotations
-from typing import Dict, List, Optional, Any
-import time, socket
+
+import socket
+import time
+from typing import Any, Dict, List, Optional
+
 import docker
+from docker.errors import APIError, NotFound
 from docker.models.containers import Container
-from docker.errors import NotFound, APIError
 
-from postgres_store import PostgresStore  # <- Postgres only
-from logger import logger
-
+from nvidia_orchestrator.storage.postgres_store import PostgresStore
+from nvidia_orchestrator.utils.logger import logger
 
 
 def _to_nano_cpus(value) -> Optional[int]:
@@ -77,7 +79,7 @@ class ContainerManager:
         logger.info("Initializing ContainerManager")
         self.client = None
         self._init_docker_client()
-        
+
         self._store = PostgresStore()  # enabled=False if not reachable
         if self._store.enabled:
             logger.info("PostgreSQL store enabled")
@@ -106,13 +108,13 @@ class ContainerManager:
         if self.client is None:
             logger.warning("Docker client is None, attempting to reinitialize...")
             self._init_docker_client()
-        
+
         try:
             self.client.ping()
         except Exception as e:
             logger.error(f"Docker client connection lost: {e}")
             self._init_docker_client()
-        
+
         self._store = PostgresStore()  # enabled=False if not reachable
         if self._store.enabled:
             logger.info("PostgreSQL store enabled")
@@ -172,7 +174,7 @@ class ContainerManager:
             exposed = cfg.get("ExposedPorts") or {}
             if not isinstance(exposed, dict):
                 return {}
-            return {k: None for k in exposed.keys()}
+            return dict.fromkeys(exposed.keys())
         except Exception:
             return {}
 
@@ -245,10 +247,10 @@ class ContainerManager:
     ) -> Dict[str, Any]:
         logger.info(f"Creating new container for image: {image}")
         logger.debug(f"Container config - env: {env}, ports: {ports}, resources: {resources}")
-        
+
         # Ensure Docker client is available
         self._ensure_docker_client()
-        
+
         # Validate image exists or can be pulled
         try:
             self.client.images.get(image)
@@ -261,15 +263,15 @@ class ContainerManager:
             except Exception as e:
                 logger.error(f"Failed to pull image {image}: {e}")
                 raise RuntimeError(f"Image {image} not available and cannot be pulled: {e}")
-        
+
         port_map = self._normalize_ports(ports)
         if not port_map:
             port_map = self._detect_exposed_ports(image)
             logger.debug(f"Detected exposed ports: {port_map}")
-        
+
         run_kwargs = _normalize_run_resources(resources)
         logger.debug(f"Run kwargs: {run_kwargs}")
-        
+
         try:
             container = self.client.containers.run(
                 image=image,
@@ -281,10 +283,10 @@ class ContainerManager:
                 **run_kwargs,
             )
             logger.info(f"Container created: {container.id} ({container.name})")
-            
+
             # Wait a bit for container to stabilize
             time.sleep(0.5)
-            
+
             # Verify container is actually running
             container.reload()
             if container.status != "running":
@@ -296,9 +298,9 @@ class ContainerManager:
                         logger.error(f"Container logs: {logs}")
                 except Exception:
                     pass
-            
+
             summary = self._summarize_container(container)
-            
+
             self._record_event({
                 "image": image,
                 "container_id": summary["id"],
@@ -308,10 +310,10 @@ class ContainerManager:
                 "status": "running",
                 "event": "create",
             })
-            
+
             logger.info(f"Container {container.id} ready with ports: {summary.get('host_ports', {})}")
             return summary
-            
+
         except Exception as e:
             logger.error(f"Failed to create container for {image}: {e}")
             # Clean up any partially created container
@@ -363,10 +365,10 @@ class ContainerManager:
         try:
             c = self._get_by_name_or_id(name_or_id)
             logger.debug(f"Found container: {c.id} ({c.name}) - status: {c.status}")
-            
+
             c.remove(force=force)
             logger.info(f"Container {c.id} removed successfully")
-            
+
             self._record_event({
                 "image": c.labels.get(self.LABEL_KEY, ""),
                 "container_id": c.id,
@@ -391,10 +393,10 @@ class ContainerManager:
         try:
             c = self._get_by_name_or_id(name_or_id)
             logger.debug(f"Found container: {c.id} ({c.name}) - status: {c.status}")
-            
+
             c.stop(timeout=timeout)
             logger.info(f"Container {c.id} stopped successfully")
-            
+
             self._record_event({
                 "image": c.labels.get(self.LABEL_KEY, ""),
                 "container_id": c.id,
@@ -454,7 +456,7 @@ class ContainerManager:
     ) -> Dict[str, Any]:
         """Register desired state for an image"""
         logger.info(f"Registering desired state for {image}: {min_replicas}-{max_replicas} replicas")
-        
+
         # Store the desired state
         if hasattr(self, '_store') and self._store and getattr(self._store, 'enabled', False):
             doc = {
@@ -467,11 +469,11 @@ class ContainerManager:
             }
             self._store.upsert_desired(image, doc)
             logger.info(f"Desired state persisted for {image}")
-        
+
         # Ensure we have the right number of running containers
         current_instances = self.list_instances_for_image(image)
         running_count = len([i for i in current_instances if i.get("state") == "running"])
-        
+
         if running_count < min_replicas:
             # Start more containers
             needed = min_replicas - running_count
@@ -481,7 +483,7 @@ class ContainerManager:
                     self.create_container(image, env=env, ports=ports, resources=resources)
                 except Exception as e:
                     logger.error(f"Failed to start additional container for {image}: {e}")
-        
+
         elif running_count > max_replicas:
             # Stop excess containers
             excess = running_count - max_replicas
@@ -492,7 +494,7 @@ class ContainerManager:
                     self.stop_container(running_instances[i]["id"])
                 except Exception as e:
                     logger.error(f"Failed to stop excess container for {image}: {e}")
-        
+
         return {
             "image": image,
             "min_replicas": min_replicas,
@@ -529,14 +531,14 @@ class ContainerManager:
         """Get current Docker container resource usage across all managed containers"""
         try:
             self._ensure_docker_client()
-            
+
             # Get all managed containers
             containers = self.list_managed_containers()
-            
+
             total_cpu_percent = 0.0
             total_memory_mb = 0.0
             running_count = 0
-            
+
             for container_info in containers:
                 if container_info.get("state") == "running":
                     running_count += 1
@@ -547,14 +549,14 @@ class ContainerManager:
                             stats = stats_res["stats"]
                             cpu_p = _calc_cpu_percent(stats) or 0.0
                             mem_p = _calc_mem_percent(stats) or 0.0
-                            
+
                             total_cpu_percent += cpu_p
                             # Estimate memory usage (this is approximate)
                             total_memory_mb += (mem_p / 100.0) * 512  # Assume 512MB default
                     except Exception as e:
                         logger.warning(f"Failed to get stats for container {container_info['id']}: {e}")
                         continue
-            
+
             return {
                 "managed_containers": len(containers),
                 "running_containers": running_count,
@@ -563,7 +565,7 @@ class ContainerManager:
                 "average_cpu_per_container": round(total_cpu_percent / max(running_count, 1), 2),
                 "average_memory_per_container_mb": round(total_memory_mb / max(running_count, 1), 2)
             }
-            
+
         except Exception as e:
             logger.error(f"Failed to get system resource usage: {e}")
             return {

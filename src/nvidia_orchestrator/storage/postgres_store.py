@@ -1,10 +1,16 @@
 # postgres_store.py
 from __future__ import annotations
-import os, json, time
+
+import json
+import os
+import time
 from typing import Any, Dict, List, Optional
+
 import psycopg
 from psycopg.rows import tuple_row
-from logger import logger
+
+from nvidia_orchestrator.utils.logger import logger
+
 
 class PostgresStore:
     """
@@ -22,18 +28,18 @@ class PostgresStore:
             "postgresql://postgres:postgres@127.0.0.1:5432/orchestrator"
         )
         logger.info(f"Initializing PostgresStore with DSN: {self.dsn.split('@')[1] if '@' in self.dsn else 'local'}")
-        
+
         self.enabled = False
         self._connection_retries = 3
         self._connection_delay = 2
-        
+
         for attempt in range(self._connection_retries):
             try:
                 with psycopg.connect(self.dsn, autocommit=True, connect_timeout=10) as conn:
                     logger.info("Connected to PostgreSQL successfully")
                     with conn.cursor(row_factory=tuple_row) as cur:
                         logger.debug("Creating tables if they don't exist...")
-                        
+
                         cur.execute("""
                             CREATE TABLE IF NOT EXISTS desired_images (
                               image        TEXT PRIMARY KEY,
@@ -77,7 +83,7 @@ class PostgresStore:
                             "CREATE INDEX IF NOT EXISTS health_container_ts_idx ON health_snapshots (container_id, ts DESC)")
 
                         cur.execute("CREATE INDEX IF NOT EXISTS events_image_ts_idx ON events (image, ts DESC)")
-                        
+
                         logger.info("Database schema initialized successfully")
                 self.enabled = True
                 logger.info("PostgresStore enabled and ready")
@@ -135,10 +141,10 @@ class PostgresStore:
 
     # -------- events --------
     def record_event(self, payload: Dict[str, Any]) -> None:
-        if not self.enabled: 
+        if not self.enabled:
             logger.warning("PostgresStore disabled, skipping event recording")
             return
-        
+
         try:
             with psycopg.connect(self.dsn, autocommit=True) as conn, conn.cursor() as cur:
                 cur.execute("""
