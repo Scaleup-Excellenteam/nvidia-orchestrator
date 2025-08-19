@@ -239,12 +239,12 @@ def get_system_resources():
         logger.error(f"Failed to get system resources: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve system resources: {str(e)}")
 
-REGISTRY_BASE = os.getenv("REGISTRY_BASE", "http://localhost:7000")
+REGISTRY_BASE = os.getenv("REGISTRY_BASE", "http://localhost:8000")
 SERVICE_ID    = os.getenv("SERVICE_ID", "orchestrator-1")
 SERVICE_KIND  = os.getenv("SERVICE_KIND", "orchestrator")
 PUBLIC_HOST   = os.getenv("PUBLIC_HOST", "127.0.0.1")
 PUBLIC_PORT   = int(os.getenv("PUBLIC_PORT", "8000"))
-HEALTH_PATH   = os.getenv("HEALTH_PATH", "/health")
+HEALTH_PATH   = os.getenv("HEALTH_PATH", "http://localhost:8000/health")
 
 def _health_url() -> str:
     return f"http://{PUBLIC_HOST}:{PUBLIC_PORT}{HEALTH_PATH}"
@@ -271,10 +271,9 @@ async def do_register():
 
     payload = {
         "id": "orchestrator-1",
-        "image_id": "orchestrator",
-        "host": "127.0.0.1",
-        "port": 8000,  # Fixed port number
-        "caps": {"CPU": "?", "MEM": "?"}
+        "kind": "orchestrator",
+        "url": HEALTH_PATH,
+        "status":"UP"
     }
     headers = {"Content-Type": "application/json"}
     if REGISTRY_API_KEY:
@@ -592,6 +591,29 @@ def start_container(body: StartBody):
             info = manager.create_container(image, env={}, ports={}, resources=resources)
             started_ids.append(info["id"])
 
+        # Save the desired state in the database
+        try:
+            # Convert resources to the format expected by register_desired_state
+            db_resources = {}
+            if resources.get("mem_limit"):
+                db_resources["memory"] = resources["mem_limit"]
+            if resources.get("nano_cpus"):
+                db_resources["cpu"] = str(resources["nano_cpus"] / 1_000_000_000)
+            
+            # Register the desired state for this image
+            manager.register_desired_state(
+                image=image,
+                min_replicas=count,
+                max_replicas=count,
+                resources=db_resources,
+                env={},
+                ports={}
+            )
+            logger.info(f"Desired state saved to database for image: {image}, count: {count}")
+        except Exception as e:
+            logger.warning(f"Failed to save desired state to database for {image}: {e}")
+            # Don't fail the container creation if DB save fails
+
         # Return the format expected by the prompt
         return {
             "ok": True,
@@ -600,7 +622,8 @@ def start_container(body: StartBody):
             "container_id": started_ids[0] if started_ids else None,
             "name": f"container-{started_ids[0]}" if started_ids else None,
             "status": "running",
-            "ports": {}
+            "ports": {},
+            "desired_state_saved": True  # Add this line
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
