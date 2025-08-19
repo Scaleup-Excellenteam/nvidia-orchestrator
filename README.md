@@ -273,3 +273,100 @@ Team 3 - NVIDIA Orchestrator Project
 
 
 
+@router.post("/upload", response_model=DockerUploadResponse, status_code=status.HTTP_201_CREATED)
+async def upload_docker_image(
+    image: UploadFile = File(...),
+    image_name: str = Form(..., alias="imageName"),
+    inner_port: int = Form(..., alias="innerPort"),
+    scaling_type: ScalingType = Form(..., alias="scalingType"),
+    min_containers: int = Form(0, alias="minContainers"),
+    max_containers: int = Form(0, alias="maxContainers"),
+    static_containers: int = Form(0, alias="staticContainers"),
+    items_per_container: int = Form(..., alias="itemsPerContainer"),
+    payment_limit: float = Form(..., alias="paymentLimit"),
+    description: str | None = Form(None),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Upload a Docker image"""
+    logger.info(f"POST /docker/upload - Docker image upload attempt by user: {current_user.email}, image_name: {image_name}")
+    
+    # Validate file type (case-insensitive)
+    filename_lower = (image.filename or "").lower()
+    if not filename_lower.endswith(('.tar', '.tar.gz', '.tgz')):
+        logger.error(f"POST /docker/upload - Invalid file type: {image.filename}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only Docker image files (.tar, .tar.gz, .tgz) are allowed"
+        )
+    
+    # Save file
+    file_path = os.path.join(UPLOAD_DIR, f"{current_user.id}_{image.filename}")
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(image.file, buffer)
+    
+    # Create database record
+    db_image = DockerImage(
+        user_id=current_user.id,
+        name=image_name,
+        image_file_path=file_path,
+        inner_port=inner_port,
+        scaling_type=scaling_type,
+        min_containers=min_containers,
+        max_containers=max_containers,
+        static_containers=static_containers,
+        items_per_container=items_per_container,
+        payment_limit=payment_limit,
+        description=description,
+        status="processing"
+    )
+    
+    db.add(db_image)
+    db.commit()
+    db.refresh(db_image)
+    
+    logger.info(f"POST /docker/upload - Docker image uploaded successfully: {image_name}, ID: {db_image.id}")
+    
+    # Generate URL for the uploaded image
+    image_filename = os.path.basename(db_image.image_file_path)
+    base_url = os.getenv("PUBLIC_BASE_URL", "http://localhost:8000")
+    image_url = f"{base_url}/docker/images/{image_filename}"
+    
+    # Send to orchestrator for processing
+    await external_client.start_container(str(db_image.id), count=1)
+    
+    # Sync image to orchestrator's database with URL
+    try:
+        orchestrator_image_data = {
+            "image": f"{image_name}:latest",
+            "image_url": image_url,  # URL for orchestrator to download the image
+            "min_replicas": min_containers or 1,
+            "max_replicas": max_containers or 5,
+            "resources": {
+                "cpu": "1.0",
+                "memory": "512Mi",
+                "disk": "10GB"
+            },
+            "env": {},
+            "ports": [{"container": inner_port, "host": inner_port}]
+        }
+        
+        await external_client.sync_image_to_orchestrator(orchestrator_image_data)
+        logger.info(f"POST /docker/upload - Image synced to orchestrator database: {image_name}")
+    except Exception as e:
+        logger.error(f"POST /docker/upload - Failed to sync image to orchestrator database {image_name}: {e}")
+        # Don't fail the upload if orchestrator sync is unavailable, just log the error
+    
+    return DockerUploadResponse(
+        image_name=db_image.name,
+        file_path=db_image.image_file_path,
+        image_url=image_url,
+        inner_port=db_image.inner_port,
+        scaling_type=db_image.scaling_type,
+        min_containers=db_image.min_containers or 0,
+        max_containers=db_image.max_containers or 0,
+        static_containers=db_image.static_containers or 0,
+        items_per_container=db_image.items_per_container,
+        payment_limit=db_image.payment_limit,
+        description=db_image.description,
+    )
