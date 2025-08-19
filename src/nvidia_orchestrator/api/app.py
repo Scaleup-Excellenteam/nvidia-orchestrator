@@ -658,14 +658,14 @@ def get_all_containers():
         logger.error(f"Failed to get all containers: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve containers: {str(e)}")
 
-# GET `/containers/{imageId}/instances`
+# GET `/containers/{imageName}/instances`
 @app.get(
-    "/containers/{imageId}/instances",
+    "/containers/{imageName}/instances",
     response_model=InstancesResponse,
     response_model_exclude_none=True,
 )
-def get_instances(imageId: str):
-    items = manager.list_instances_for_image(imageId)
+def get_instances(imageName: str):
+    items = manager.list_instances_by_image_name(imageName)
     return {"instances": [_instance_view(x) for x in items]}
 
 # GET `/containers/instances/{instanceId}/health`

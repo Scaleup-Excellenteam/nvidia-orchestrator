@@ -362,6 +362,17 @@ class ContainerManager:
         self._ensure_docker_client()
         return [self._summarize_container(c) for c in self._find_by_label_value(image)]
 
+    def list_instances_by_image_name(self, image_name: str) -> List[Dict[str, Any]]:
+        """Find instances by Docker image name instead of label value"""
+        self._ensure_docker_client()
+        try:
+            # Use Docker's ancestor filter to find containers by image name
+            containers = self.client.containers.list(all=True, filters={"ancestor": image_name})
+            return [self._summarize_container(c) for c in containers]
+        except Exception as e:
+            logger.error(f"Error finding containers by image name {image_name}: {e}")
+            return []
+
     def delete_container(self, name_or_id: str, *, force: bool = False) -> Dict[str, Any]:
         logger.info(f"Deleting container: {name_or_id} (force: {force})")
         try:
