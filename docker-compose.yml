@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: orchestrator-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: orchestrator
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/db-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d orchestrator"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - orchestrator-network
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nvidia-orchestrator:latest
+    container_name: orchestrator-api
+    ports:
+      - "8000:8000"
+    environment:
+      POSTGRES_URL: postgresql://postgres:postgres@postgres:5432/orchestrator
+      LOG_FILE: /app/logs/combined.log
+      HEALTH_INTERVAL_SECONDS: "60"
+      HEALTH_RETENTION_DAYS: "7"
+      PYTHONPATH: /app/src
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./logs:/app/logs
+      # Development mode - mount source for hot reload
+      - ./src:/app/src:ro
+      - ./scripts:/app/scripts:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - orchestrator-network
+    labels:
+      - "managed-by=nvidia-orchestrator"
+    restart: unless-stopped
+    # Override entrypoint if needed for development
+    # entrypoint: ["python", "-m", "nvidia_orchestrator.main"]
+    
+  # Alternative: Run API and monitor separately
+  # Uncomment if you prefer separate containers for each component
+  
+  # api:
+  #   image: nvidia-orchestrator:latest
+  #   container_name: orchestrator-api-only
+  #   command: ["nvidia-orchestrator-api"]
+  #   ports:
+  #     - "8000:8000"
+  #   environment:
+  #     POSTGRES_URL: postgresql://postgres:postgres@postgres:5432/orchestrator
+  #     LOG_FILE: /app/logs/api.log
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock:ro
+  #     - ./logs:/app/logs
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   networks:
+  #     - orchestrator-network
+  #   restart: unless-stopped
+  
+  # monitor:
+  #   image: nvidia-orchestrator:latest
+  #   container_name: orchestrator-monitor
+  #   command: ["nvidia-orchestrator-monitor"]
+  #   environment:
+  #     POSTGRES_URL: postgresql://postgres:postgres@postgres:5432/orchestrator
+  #     LOG_FILE: /app/logs/monitor.log
+  #     HEALTH_INTERVAL_SECONDS: "60"
+  #     HEALTH_RETENTION_DAYS: "7"
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock:ro
+  #     - ./logs:/app/logs
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   networks:
+  #     - orchestrator-network
+  #   restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  orchestrator-network:
+    driver: bridge
+    name: nvidia-orchestrator-net

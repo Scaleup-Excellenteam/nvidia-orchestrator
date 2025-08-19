@@ -1,0 +1,10 @@
+include LICENSE
+include README.md
+include pyproject.toml
+recursive-include src/nvidia_orchestrator py.typed
+recursive-include scripts *.sh *.sql
+recursive-include docs *.md
+exclude .gitignore
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+recursive-exclude tests * 

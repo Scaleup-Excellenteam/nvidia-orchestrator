@@ -1,0 +1,114 @@
+version: '3.8'
+
+# Development configuration for NVIDIA Orchestrator
+# Usage: docker-compose -f docker-compose.dev.yml up
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: orchestrator-postgres-dev
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: orchestrator
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+      - ./scripts/db-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d orchestrator"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - orchestrator-dev-network
+
+  # Development mode - runs from source with hot reload
+  orchestrator-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    image: nvidia-orchestrator:dev
+    container_name: orchestrator-api-dev
+    ports:
+      - "8000:8000"
+    environment:
+      POSTGRES_URL: postgresql://postgres:postgres@postgres:5432/orchestrator
+      LOG_FILE: /app/logs/combined.log
+      HEALTH_INTERVAL_SECONDS: "30"  # Faster for dev
+      HEALTH_RETENTION_DAYS: "1"     # Less retention for dev
+      PYTHONPATH: /app/src
+      PYTHONUNBUFFERED: "1"
+      # Development mode settings
+      RELOAD: "true"
+      DEBUG: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./logs:/app/logs
+      # Mount source code for hot reload
+      - ./src:/app/src
+      - ./scripts:/app/scripts
+      - ./pyproject.toml:/app/pyproject.toml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - orchestrator-dev-network
+    labels:
+      - "managed-by=nvidia-orchestrator-dev"
+    # Override to use development server with reload
+    entrypoint: ["python", "-m", "uvicorn", "nvidia_orchestrator.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    
+  # Separate health monitor for development
+  monitor-dev:
+    image: nvidia-orchestrator:dev
+    container_name: orchestrator-monitor-dev
+    environment:
+      POSTGRES_URL: postgresql://postgres:postgres@postgres:5432/orchestrator
+      LOG_FILE: /app/logs/monitor.log
+      HEALTH_INTERVAL_SECONDS: "30"
+      HEALTH_RETENTION_DAYS: "1"
+      PYTHONPATH: /app/src
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./logs:/app/logs
+      - ./src:/app/src
+      - ./scripts:/app/scripts
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - orchestrator-dev-network
+    labels:
+      - "managed-by=nvidia-orchestrator-dev"
+    entrypoint: ["python", "-m", "nvidia_orchestrator.monitoring.health_monitor"]
+
+  # pgAdmin for database management (optional)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: orchestrator-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "5050:80"
+    networks:
+      - orchestrator-dev-network
+    depends_on:
+      - postgres
+    profiles:
+      - tools
+
+volumes:
+  postgres_data_dev:
+    driver: local
+
+networks:
+  orchestrator-dev-network:
+    driver: bridge
+    name: nvidia-orchestrator-dev-net 
