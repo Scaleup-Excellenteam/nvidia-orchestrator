@@ -17,8 +17,10 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 COPY app.py container_manager.py postgres_store.py health_monitor.py logger.py /app/
 COPY start.sh /app/start.sh
 
-# Create logs directory and make startup script executable
-RUN mkdir -p /app/logs && chmod +x /app/start.sh
+# Create logs directory, normalize line endings, and make startup script executable
+RUN mkdir -p /app/logs \
+    && sed -i 's/\r$//' /app/start.sh \
+    && chmod +x /app/start.sh
 
 EXPOSE 8000
 

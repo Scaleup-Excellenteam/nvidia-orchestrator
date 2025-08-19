@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # Wait for PostgreSQL to be ready using Python instead of pg_isready
 echo "Waiting for PostgreSQL to be ready..."
@@ -24,18 +24,17 @@ while attempt < max_attempts:
         time.sleep(2)
 
 print("PostgreSQL failed to become ready after maximum attempts")
-exit(1)
+exit(2)
 EOF
 
 if [ $? -ne 0 ]; then
-    echo "Failed to connect to PostgreSQL, exiting"
-    exit 1
+    echo "WARNING: Failed to confirm PostgreSQL readiness. Continuing startup with persistence disabled."
 fi
 
 # Wait a bit more to ensure the database is fully initialized
 sleep 5
 
-# Start health monitor in background
+# Start health monitor in background (it will skip writes if DB is disabled)
 echo "Starting health monitor..."
 python health_monitor.py &
 
