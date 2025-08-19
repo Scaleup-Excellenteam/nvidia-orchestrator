@@ -1,19 +1,16 @@
 # Multi-stage Dockerfile for NVIDIA Orchestrator
 
 # Base stage with common dependencies
-FROM python:3.11-slim AS base
+# Pin to stable Debian to avoid apt repo issues
+FROM python:3.11-slim-bookworm AS base
 
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    postgresql-client \
-    && rm -rf /var/lib/apt/lists/*
+# No system packages needed; Python deps are wheels
 
 # Set environment variables
-ENV PYTHONPATH=/app/src:${PYTHONPATH} \
+ENV PYTHONPATH=/app/src:${PYTHONPATH:-} \
     PYTHONUNBUFFERED=1 \
     LOG_FILE=/app/logs/combined.log
 
@@ -69,5 +66,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # Use the entry point to run the server
 ENTRYPOINT ["nvidia-orchestrator-server"]
 
-# Default to production stage
-FROM production
+
