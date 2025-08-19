@@ -537,10 +537,6 @@ def _calc_mem_percent(stats: Dict[str, Any]) -> Optional[float]:
 
 # -------- Routes --------
 
-@app.get("/health")
-def health():
-    return {"status": "OK"}
-
 @app.get("/images")
 def get_images():
     """Returns current desired state and running container counts from PostgresStore"""
