@@ -8,3 +8,217 @@
 [2025-08-18 20:44:19,080] [nvidia-orchestrator] PostgreSQL connection attempt 3/3 failed: connection timeout expired
 [2025-08-18 20:44:19,096] [nvidia-orchestrator] Failed to initialize PostgresStore after 3 attempts: connection timeout expired
 [2025-08-18 20:44:19,097] [nvidia-orchestrator] PostgreSQL store disabled - events will not be persisted
+[2025-08-19 11:26:13,281] [nvidia-orchestrator] [INFO] Initializing ContainerManager
+[2025-08-19 11:26:13,303] [nvidia-orchestrator] [INFO] Docker client initialized successfully
+[2025-08-19 11:26:13,303] [nvidia-orchestrator] [INFO] Initializing PostgresStore with DSN: 127.0.0.1:5432/orchestrator
+[2025-08-19 11:26:23,431] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 1/3 failed: connection timeout expired
+[2025-08-19 11:26:23,431] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:26:35,483] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 2/3 failed: connection timeout expired
+[2025-08-19 11:26:35,483] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:26:47,574] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 3/3 failed: connection timeout expired
+[2025-08-19 11:26:47,575] [nvidia-orchestrator] [ERROR] Failed to initialize PostgresStore after 3 attempts: connection timeout expired
+[2025-08-19 11:26:47,577] [nvidia-orchestrator] [WARNING] PostgreSQL store disabled - events will not be persisted
+[2025-08-19 11:27:24,134] [nvidia-orchestrator] [INFO] Initializing ContainerManager
+[2025-08-19 11:27:24,164] [nvidia-orchestrator] [INFO] Docker client initialized successfully
+[2025-08-19 11:27:24,165] [nvidia-orchestrator] [INFO] Initializing PostgresStore with DSN: 127.0.0.1:5432/orchestrator
+[2025-08-19 11:27:34,189] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 1/3 failed: connection timeout expired
+[2025-08-19 11:27:34,190] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:27:46,260] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 2/3 failed: connection timeout expired
+[2025-08-19 11:27:46,260] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:27:58,330] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 3/3 failed: connection timeout expired
+[2025-08-19 11:27:58,330] [nvidia-orchestrator] [ERROR] Failed to initialize PostgresStore after 3 attempts: connection timeout expired
+[2025-08-19 11:27:58,331] [nvidia-orchestrator] [WARNING] PostgreSQL store disabled - events will not be persisted
+[2025-08-19 11:27:58,577] [nvidia-orchestrator] [INFO] Starting Team 3 Orchestrator...
+[2025-08-19 11:27:58,803] [nvidia-orchestrator] [INFO] Initializing PostgresStore with DSN: 127.0.0.1:5432/orchestrator
+[2025-08-19 11:28:03,342] [nvidia-orchestrator] [INFO] Starting NVIDIA Orchestrator...
+[2025-08-19 11:28:03,343] [nvidia-orchestrator] [INFO] Starting API server process...
+[2025-08-19 11:28:03,372] [nvidia-orchestrator] [INFO] Starting health monitor process...
+[2025-08-19 11:28:03,390] [nvidia-orchestrator] [INFO] NVIDIA Orchestrator is running. Press Ctrl+C to stop.
+[2025-08-19 11:28:08,215] [nvidia-orchestrator] [INFO] Starting health monitor...
+[2025-08-19 11:28:08,215] [nvidia-orchestrator] [INFO] Initializing ContainerManager
+[2025-08-19 11:28:08,243] [nvidia-orchestrator] [INFO] Docker client initialized successfully
+[2025-08-19 11:28:08,244] [nvidia-orchestrator] [INFO] Initializing PostgresStore with DSN: 127.0.0.1:5432/orchestrator
+[2025-08-19 11:28:08,838] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 1/3 failed: connection timeout expired
+[2025-08-19 11:28:08,839] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:28:09,258] [nvidia-orchestrator] [INFO] Initializing ContainerManager
+[2025-08-19 11:28:09,283] [nvidia-orchestrator] [INFO] Docker client initialized successfully
+[2025-08-19 11:28:09,283] [nvidia-orchestrator] [INFO] Initializing PostgresStore with DSN: 127.0.0.1:5432/orchestrator
+[2025-08-19 11:28:18,328] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 1/3 failed: connection timeout expired
+[2025-08-19 11:28:18,328] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:28:19,311] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 1/3 failed: connection timeout expired
+[2025-08-19 11:28:19,312] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:28:20,893] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 2/3 failed: connection timeout expired
+[2025-08-19 11:28:20,893] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:28:30,350] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 2/3 failed: connection timeout expired
+[2025-08-19 11:28:30,350] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:28:31,411] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 2/3 failed: connection timeout expired
+[2025-08-19 11:28:31,412] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:28:32,933] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 3/3 failed: connection timeout expired
+[2025-08-19 11:28:32,934] [nvidia-orchestrator] [ERROR] Failed to initialize PostgresStore after 3 attempts: connection timeout expired
+[2025-08-19 11:28:32,946] [nvidia-orchestrator] [INFO] Initializing PostgresStore with DSN: 127.0.0.1:5432/orchestrator
+[2025-08-19 11:28:42,416] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 3/3 failed: connection timeout expired
+[2025-08-19 11:28:42,417] [nvidia-orchestrator] [ERROR] Failed to initialize PostgresStore after 3 attempts: connection timeout expired
+[2025-08-19 11:28:42,417] [nvidia-orchestrator] [WARNING] PostgreSQL store disabled - events will not be persisted
+[2025-08-19 11:28:42,417] [nvidia-orchestrator] [INFO] Initializing PostgresStore with DSN: 127.0.0.1:5432/orchestrator
+[2025-08-19 11:28:42,983] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 1/3 failed: connection timeout expired
+[2025-08-19 11:28:42,984] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:28:43,509] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 3/3 failed: connection timeout expired
+[2025-08-19 11:28:43,511] [nvidia-orchestrator] [ERROR] Failed to initialize PostgresStore after 3 attempts: connection timeout expired
+[2025-08-19 11:28:43,511] [nvidia-orchestrator] [WARNING] PostgreSQL store disabled - events will not be persisted
+[2025-08-19 11:28:43,545] [nvidia-orchestrator] [INFO] Starting API server on port 8000...
+[2025-08-19 11:28:43,613] [nvidia-orchestrator] [INFO] Starting Team 3 Orchestrator...
+[2025-08-19 11:28:43,688] [nvidia-orchestrator] [INFO] Initializing PostgresStore with DSN: 127.0.0.1:5432/orchestrator
+[2025-08-19 11:28:52,467] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 1/3 failed: connection timeout expired
+[2025-08-19 11:28:52,467] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:28:53,747] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 1/3 failed: connection timeout expired
+[2025-08-19 11:28:53,748] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:28:55,007] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 2/3 failed: connection timeout expired
+[2025-08-19 11:28:55,008] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:29:04,524] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 2/3 failed: connection timeout expired
+[2025-08-19 11:29:04,525] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:29:05,763] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 2/3 failed: connection timeout expired
+[2025-08-19 11:29:05,764] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:29:07,030] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 3/3 failed: connection timeout expired
+[2025-08-19 11:29:07,030] [nvidia-orchestrator] [ERROR] Failed to initialize PostgresStore after 3 attempts: connection timeout expired
+[2025-08-19 11:29:07,030] [nvidia-orchestrator] [WARNING] PostgreSQL store disabled - events will not be persisted
+[2025-08-19 11:29:07,105] [nvidia-orchestrator] [INFO] [registry] skipped: REGISTRY_URL not set
+[2025-08-19 11:29:16,608] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 3/3 failed: connection timeout expired
+[2025-08-19 11:29:16,608] [nvidia-orchestrator] [ERROR] Failed to initialize PostgresStore after 3 attempts: connection timeout expired
+[2025-08-19 11:29:16,608] [nvidia-orchestrator] [INFO] Health monitor starting: interval=60s, retention_days=7, store.enabled=False
+[2025-08-19 11:29:16,609] [nvidia-orchestrator] [WARNING] PostgresStore disabled; skipping snapshot
+[2025-08-19 11:29:17,792] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 3/3 failed: connection timeout expired
+[2025-08-19 11:29:17,792] [nvidia-orchestrator] [ERROR] Failed to initialize PostgresStore after 3 attempts: connection timeout expired
+[2025-08-19 11:29:17,807] [nvidia-orchestrator] [INFO] Initializing PostgresStore with DSN: 127.0.0.1:5432/orchestrator
+[2025-08-19 11:29:27,864] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 1/3 failed: connection timeout expired
+[2025-08-19 11:29:27,864] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:29:39,930] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 2/3 failed: connection timeout expired
+[2025-08-19 11:29:39,931] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:29:51,955] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 3/3 failed: connection timeout expired
+[2025-08-19 11:29:51,955] [nvidia-orchestrator] [ERROR] Failed to initialize PostgresStore after 3 attempts: connection timeout expired
+[2025-08-19 11:29:51,957] [nvidia-orchestrator] [WARNING] PostgreSQL store disabled - events will not be persisted
+[2025-08-19 11:29:52,039] [nvidia-orchestrator] [INFO] [registry] skipped: REGISTRY_URL not set
+[2025-08-19 11:30:16,610] [nvidia-orchestrator] [WARNING] PostgresStore disabled; skipping snapshot
+[2025-08-19 11:31:06,688] [nvidia-orchestrator] [INFO] Initializing ContainerManager
+[2025-08-19 11:31:06,719] [nvidia-orchestrator] [INFO] Docker client initialized successfully
+[2025-08-19 11:31:06,719] [nvidia-orchestrator] [INFO] Initializing PostgresStore with DSN: 127.0.0.1:5432/orchestrator
+[2025-08-19 11:31:16,611] [nvidia-orchestrator] [WARNING] PostgresStore disabled; skipping snapshot
+[2025-08-19 11:31:16,809] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 1/3 failed: connection timeout expired
+[2025-08-19 11:31:16,809] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:31:28,870] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 2/3 failed: connection timeout expired
+[2025-08-19 11:31:28,870] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:31:40,981] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 3/3 failed: connection timeout expired
+[2025-08-19 11:31:40,981] [nvidia-orchestrator] [ERROR] Failed to initialize PostgresStore after 3 attempts: connection timeout expired
+[2025-08-19 11:31:40,981] [nvidia-orchestrator] [WARNING] PostgreSQL store disabled - events will not be persisted
+[2025-08-19 11:31:41,114] [nvidia-orchestrator] [INFO] Starting Team 3 Orchestrator...
+[2025-08-19 11:31:41,126] [nvidia-orchestrator] [INFO] [OK] Docker connection validated
+[2025-08-19 11:31:41,128] [nvidia-orchestrator] [INFO] Initializing PostgresStore with DSN: 127.0.0.1:5432/orchestrator
+[2025-08-19 11:31:51,175] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 1/3 failed: connection timeout expired
+[2025-08-19 11:31:51,175] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:32:03,276] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 2/3 failed: connection timeout expired
+[2025-08-19 11:32:03,276] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:32:15,318] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 3/3 failed: connection timeout expired
+[2025-08-19 11:32:15,319] [nvidia-orchestrator] [ERROR] Failed to initialize PostgresStore after 3 attempts: connection timeout expired
+[2025-08-19 11:32:15,319] [nvidia-orchestrator] [WARNING] [WARN] PostgreSQL disabled - events will not be persisted
+[2025-08-19 11:32:15,328] [nvidia-orchestrator] [INFO] Initializing PostgresStore with DSN: 127.0.0.1:5432/orchestrator
+[2025-08-19 11:32:25,371] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 1/3 failed: connection timeout expired
+[2025-08-19 11:32:25,375] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:32:37,476] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 2/3 failed: connection timeout expired
+[2025-08-19 11:32:37,476] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:32:49,558] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 3/3 failed: connection timeout expired
+[2025-08-19 11:32:49,559] [nvidia-orchestrator] [ERROR] Failed to initialize PostgresStore after 3 attempts: connection timeout expired
+[2025-08-19 11:32:49,559] [nvidia-orchestrator] [WARNING] PostgreSQL store disabled - events will not be persisted
+[2025-08-19 11:32:49,571] [nvidia-orchestrator] [INFO] [OK] Container manager validated - managing 0 containers
+[2025-08-19 11:32:49,613] [nvidia-orchestrator] [INFO] [OK] System resources validated - 20 CPU cores, 31.6GB RAM
+[2025-08-19 11:32:49,613] [nvidia-orchestrator] [INFO] [SUCCESS] All critical components validated successfully!
+[2025-08-19 11:32:49,613] [nvidia-orchestrator] [INFO] [registry] skipped: REGISTRY_URL not set
+[2025-08-19 11:36:40,764] [nvidia-orchestrator] [INFO] Initializing ContainerManager
+[2025-08-19 11:36:40,811] [nvidia-orchestrator] [INFO] Docker client initialized successfully
+[2025-08-19 11:36:40,813] [nvidia-orchestrator] [INFO] Initializing PostgresStore with DSN: 127.0.0.1:5432/orchestrator
+[2025-08-19 11:36:50,872] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 1/3 failed: connection timeout expired
+[2025-08-19 11:36:50,872] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:37:02,930] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 2/3 failed: connection timeout expired
+[2025-08-19 11:37:02,931] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:37:15,051] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 3/3 failed: connection timeout expired
+[2025-08-19 11:37:15,051] [nvidia-orchestrator] [ERROR] Failed to initialize PostgresStore after 3 attempts: connection timeout expired
+[2025-08-19 11:37:15,051] [nvidia-orchestrator] [WARNING] PostgreSQL store disabled - events will not be persisted
+[2025-08-19 11:38:30,481] [nvidia-orchestrator] [INFO] Initializing ContainerManager
+[2025-08-19 11:38:30,552] [nvidia-orchestrator] [INFO] Docker client initialized successfully
+[2025-08-19 11:38:30,553] [nvidia-orchestrator] [INFO] Initializing PostgresStore with DSN: localhost:5432/orchestrator 
+[2025-08-19 11:38:30,719] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 1/3 failed: connection failed: connection to server at "127.0.0.1", port 5432 failed: FATAL:  database "orchestrator " does not exist
+Multiple connection attempts failed. All failures were:
+- host: 'localhost', port: '5432', hostaddr: '::1': connection failed: connection to server at "::1", port 5432 failed: FATAL:  database "orchestrator " does not exist
+- host: 'localhost', port: '5432', hostaddr: '127.0.0.1': connection failed: connection to server at "127.0.0.1", port 5432 failed: FATAL:  database "orchestrator " does not exist
+[2025-08-19 11:38:30,721] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:38:32,803] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 2/3 failed: connection failed: connection to server at "127.0.0.1", port 5432 failed: FATAL:  database "orchestrator " does not exist
+Multiple connection attempts failed. All failures were:
+- host: 'localhost', port: '5432', hostaddr: '::1': connection failed: connection to server at "::1", port 5432 failed: FATAL:  database "orchestrator " does not exist
+- host: 'localhost', port: '5432', hostaddr: '127.0.0.1': connection failed: connection to server at "127.0.0.1", port 5432 failed: FATAL:  database "orchestrator " does not exist
+[2025-08-19 11:38:32,804] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:38:34,880] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 3/3 failed: connection failed: connection to server at "127.0.0.1", port 5432 failed: FATAL:  database "orchestrator " does not exist
+Multiple connection attempts failed. All failures were:
+- host: 'localhost', port: '5432', hostaddr: '::1': connection failed: connection to server at "::1", port 5432 failed: FATAL:  database "orchestrator " does not exist
+- host: 'localhost', port: '5432', hostaddr: '127.0.0.1': connection failed: connection to server at "127.0.0.1", port 5432 failed: FATAL:  database "orchestrator " does not exist
+[2025-08-19 11:38:34,882] [nvidia-orchestrator] [ERROR] Failed to initialize PostgresStore after 3 attempts: connection failed: connection to server at "127.0.0.1", port 5432 failed: FATAL:  database "orchestrator " does not exist
+Multiple connection attempts failed. All failures were:
+- host: 'localhost', port: '5432', hostaddr: '::1': connection failed: connection to server at "::1", port 5432 failed: FATAL:  database "orchestrator " does not exist
+- host: 'localhost', port: '5432', hostaddr: '127.0.0.1': connection failed: connection to server at "127.0.0.1", port 5432 failed: FATAL:  database "orchestrator " does not exist
+[2025-08-19 11:38:34,884] [nvidia-orchestrator] [WARNING] PostgreSQL store disabled - events will not be persisted
+[2025-08-19 11:39:19,623] [nvidia-orchestrator] [INFO] Initializing ContainerManager
+[2025-08-19 11:39:19,667] [nvidia-orchestrator] [INFO] Docker client initialized successfully
+[2025-08-19 11:39:19,667] [nvidia-orchestrator] [INFO] Initializing PostgresStore with DSN: localhost:5432/orchestrator 
+[2025-08-19 11:39:19,735] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 1/3 failed: connection failed: connection to server at "127.0.0.1", port 5432 failed: FATAL:  database "orchestrator " does not exist
+Multiple connection attempts failed. All failures were:
+- host: 'localhost', port: '5432', hostaddr: '::1': connection failed: connection to server at "::1", port 5432 failed: FATAL:  database "orchestrator " does not exist
+- host: 'localhost', port: '5432', hostaddr: '127.0.0.1': connection failed: connection to server at "127.0.0.1", port 5432 failed: FATAL:  database "orchestrator " does not exist
+[2025-08-19 11:39:19,735] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:39:21,786] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 2/3 failed: connection failed: connection to server at "127.0.0.1", port 5432 failed: FATAL:  database "orchestrator " does not exist
+Multiple connection attempts failed. All failures were:
+- host: 'localhost', port: '5432', hostaddr: '::1': connection failed: connection to server at "::1", port 5432 failed: FATAL:  database "orchestrator " does not exist
+- host: 'localhost', port: '5432', hostaddr: '127.0.0.1': connection failed: connection to server at "127.0.0.1", port 5432 failed: FATAL:  database "orchestrator " does not exist
+[2025-08-19 11:39:21,786] [nvidia-orchestrator] [INFO] Retrying in 2 seconds...
+[2025-08-19 11:39:23,842] [nvidia-orchestrator] [WARNING] PostgreSQL connection attempt 3/3 failed: connection failed: connection to server at "127.0.0.1", port 5432 failed: FATAL:  database "orchestrator " does not exist
+Multiple connection attempts failed. All failures were:
+- host: 'localhost', port: '5432', hostaddr: '::1': connection failed: connection to server at "::1", port 5432 failed: FATAL:  database "orchestrator " does not exist
+- host: 'localhost', port: '5432', hostaddr: '127.0.0.1': connection failed: connection to server at "127.0.0.1", port 5432 failed: FATAL:  database "orchestrator " does not exist
+[2025-08-19 11:39:23,843] [nvidia-orchestrator] [ERROR] Failed to initialize PostgresStore after 3 attempts: connection failed: connection to server at "127.0.0.1", port 5432 failed: FATAL:  database "orchestrator " does not exist
+Multiple connection attempts failed. All failures were:
+- host: 'localhost', port: '5432', hostaddr: '::1': connection failed: connection to server at "::1", port 5432 failed: FATAL:  database "orchestrator " does not exist
+- host: 'localhost', port: '5432', hostaddr: '127.0.0.1': connection failed: connection to server at "127.0.0.1", port 5432 failed: FATAL:  database "orchestrator " does not exist
+[2025-08-19 11:39:23,843] [nvidia-orchestrator] [WARNING] PostgreSQL store disabled - events will not be persisted
+[2025-08-19 11:39:55,215] [nvidia-orchestrator] [INFO] Initializing PostgresStore with DSN: 127.0.0.1:5432/orchestrator
+[2025-08-19 11:39:55,238] [nvidia-orchestrator] [INFO] Connected to PostgreSQL successfully
+[2025-08-19 11:39:55,255] [nvidia-orchestrator] [INFO] Database schema initialized successfully
+[2025-08-19 11:39:55,256] [nvidia-orchestrator] [INFO] PostgresStore enabled and ready
+[2025-08-19 11:39:55,281] [nvidia-orchestrator] [INFO] Initializing PostgresStore with DSN: 127.0.0.1:5432/orchestrator
+[2025-08-19 11:39:55,319] [nvidia-orchestrator] [INFO] Connected to PostgreSQL successfully
+[2025-08-19 11:39:55,330] [nvidia-orchestrator] [INFO] Database schema initialized successfully
+[2025-08-19 11:39:55,330] [nvidia-orchestrator] [INFO] PostgresStore enabled and ready
+[2025-08-19 11:39:55,331] [nvidia-orchestrator] [INFO] PostgreSQL store enabled
+[2025-08-19 11:40:14,437] [nvidia-orchestrator] [INFO] Creating new container for image: nginx:alpine
+[2025-08-19 11:40:14,445] [nvidia-orchestrator] [INFO] Initializing PostgresStore with DSN: 127.0.0.1:5432/orchestrator
+[2025-08-19 11:40:14,467] [nvidia-orchestrator] [INFO] Connected to PostgreSQL successfully
+[2025-08-19 11:40:14,489] [nvidia-orchestrator] [INFO] Database schema initialized successfully
+[2025-08-19 11:40:14,490] [nvidia-orchestrator] [INFO] PostgresStore enabled and ready
+[2025-08-19 11:40:14,490] [nvidia-orchestrator] [INFO] PostgreSQL store enabled
+[2025-08-19 11:40:15,294] [nvidia-orchestrator] [INFO] Container created: ace50aeda7ea3494d7bb9db4447fcdb893e6625ddc163c8869120f8d5ef6121f (ecstatic_mahavira)
+[2025-08-19 11:40:16,045] [nvidia-orchestrator] [INFO] Container ace50aeda7ea3494d7bb9db4447fcdb893e6625ddc163c8869120f8d5ef6121f ready with ports: {'80/tcp': 60586}
+[2025-08-19 11:40:32,960] [nvidia-orchestrator] [INFO] Initializing PostgresStore with DSN: 127.0.0.1:5432/orchestrator
+[2025-08-19 11:40:32,980] [nvidia-orchestrator] [INFO] Connected to PostgreSQL successfully
+[2025-08-19 11:40:32,995] [nvidia-orchestrator] [INFO] Database schema initialized successfully
+[2025-08-19 11:40:32,996] [nvidia-orchestrator] [INFO] PostgresStore enabled and ready
+[2025-08-19 11:40:32,996] [nvidia-orchestrator] [INFO] PostgreSQL store enabled
+[2025-08-19 11:40:48,957] [nvidia-orchestrator] [INFO] Initializing PostgresStore with DSN: 127.0.0.1:5432/orchestrator
+[2025-08-19 11:40:48,984] [nvidia-orchestrator] [INFO] Connected to PostgreSQL successfully
+[2025-08-19 11:40:49,004] [nvidia-orchestrator] [INFO] Database schema initialized successfully
+[2025-08-19 11:40:49,005] [nvidia-orchestrator] [INFO] PostgresStore enabled and ready
+[2025-08-19 11:40:49,005] [nvidia-orchestrator] [INFO] PostgreSQL store enabled
+[2025-08-19 11:40:49,202] [nvidia-orchestrator] [INFO] Initializing PostgresStore with DSN: 127.0.0.1:5432/orchestrator
+[2025-08-19 11:40:49,216] [nvidia-orchestrator] [INFO] Connected to PostgreSQL successfully
+[2025-08-19 11:40:49,224] [nvidia-orchestrator] [INFO] Database schema initialized successfully
+[2025-08-19 11:40:49,224] [nvidia-orchestrator] [INFO] PostgresStore enabled and ready
+[2025-08-19 11:40:49,233] [nvidia-orchestrator] [INFO] Initializing PostgresStore with DSN: 127.0.0.1:5432/orchestrator
+[2025-08-19 11:40:49,248] [nvidia-orchestrator] [INFO] Connected to PostgreSQL successfully
+[2025-08-19 11:40:49,256] [nvidia-orchestrator] [INFO] Database schema initialized successfully
+[2025-08-19 11:40:49,257] [nvidia-orchestrator] [INFO] PostgresStore enabled and ready
+[2025-08-19 11:41:07,233] [nvidia-orchestrator] [INFO] Deleting container: ace50aeda7ea3494d7bb9db4447fcdb893e6625ddc163c8869120f8d5ef6121f (force: True)
+[2025-08-19 11:41:08,068] [nvidia-orchestrator] [INFO] Container ace50aeda7ea3494d7bb9db4447fcdb893e6625ddc163c8869120f8d5ef6121f removed successfully

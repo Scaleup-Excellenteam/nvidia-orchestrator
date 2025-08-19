@@ -3,8 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from typing import List, Optional
+
+import uvicorn
+
+from nvidia_orchestrator import __version__
+from nvidia_orchestrator.api.app import app
+from nvidia_orchestrator.main import run
+from nvidia_orchestrator.monitoring.health_monitor import run_forever
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -61,7 +69,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="Port to bind to (default: 8000)"
     )
 
-    # Health monitor command
+    # Monitor command (monitor only)
     monitor_parser = subparsers.add_parser(
         "monitor",
         help="Run only the health monitor"
@@ -83,28 +91,21 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.command == "server":
         # Run full server (API + monitor)
-        from nvidia_orchestrator.main import run
         run()
         return 0
 
     elif args.command == "api":
         # Run API only
-        import uvicorn
-
-        from nvidia_orchestrator.api.app import app
         uvicorn.run(app, host=args.host, port=args.port)
         return 0
 
     elif args.command == "monitor":
         # Run monitor only
-        import os
         os.environ["HEALTH_INTERVAL_SECONDS"] = str(args.interval)
-        from nvidia_orchestrator.monitoring import run_forever
         run_forever()
         return 0
 
     elif args.command == "version":
-        from nvidia_orchestrator import __version__
         print(f"NVIDIA Orchestrator version {__version__}")
         return 0
 

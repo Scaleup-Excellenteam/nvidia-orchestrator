@@ -13,7 +13,13 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
 from nvidia_orchestrator.core.container_manager import ContainerManager
+from nvidia_orchestrator.storage.postgres_store import PostgresStore
 from nvidia_orchestrator.utils.logger import logger
 
 app = FastAPI(title="Team 3 Orchestrator API", version="1.0.0")
@@ -60,7 +66,6 @@ def health_detailed():
 
         # Check PostgreSQL connection
         try:
-            from nvidia_orchestrator.storage.postgres_store import PostgresStore
             store = PostgresStore()
             if store.enabled:
                 health_status["components"]["postgresql"] = {"status": "OK", "message": "Connected"}
@@ -83,16 +88,16 @@ def health_detailed():
 
         # Check system resources
         try:
-            import psutil
-            cpu_percent = psutil.cpu_percent(interval=0.1)
-            memory = psutil.virtual_memory()
-            health_status["components"]["system_resources"] = {
-                "status": "OK",
-                "cpu_usage": f"{cpu_percent:.1f}%",
-                "memory_usage": f"{memory.percent:.1f}%"
-            }
-        except ImportError:
-            health_status["components"]["system_resources"] = {"status": "WARNING", "message": "psutil not available"}
+            if psutil:
+                cpu_percent = psutil.cpu_percent(interval=0.1)
+                memory = psutil.virtual_memory()
+                health_status["components"]["system_resources"] = {
+                    "status": "OK",
+                    "cpu_usage": f"{cpu_percent:.1f}%",
+                    "memory_usage": f"{memory.percent:.1f}%"
+                }
+            else:
+                health_status["components"]["system_resources"] = {"status": "WARNING", "message": "psutil not available"}
         except Exception as e:
             health_status["components"]["system_resources"] = {"status": "ERROR", "message": str(e)}
 
@@ -137,7 +142,6 @@ def test_integration():
 
         # Test 3: PostgreSQL connection
         try:
-            from nvidia_orchestrator.storage.postgres_store import PostgresStore
             store = PostgresStore()
             if store.enabled:
                 test_results["tests"]["postgresql"] = {"status": "PASS", "message": "Database connected"}
@@ -149,22 +153,21 @@ def test_integration():
 
         # Test 4: System resources
         try:
-            import psutil
-            cpu_count = psutil.cpu_count()
-            memory = psutil.virtual_memory()
-            test_results["tests"]["system_resources"] = {
-                "status": "PASS",
-                "message": f"{cpu_count} CPU cores, {round(memory.total / (1024**3), 1)}GB RAM"
-            }
-        except ImportError:
-            test_results["tests"]["system_resources"] = {"status": "WARNING", "message": "psutil not available"}
+            if psutil:
+                cpu_count = psutil.cpu_count()
+                memory = psutil.virtual_memory()
+                test_results["tests"]["system_resources"] = {
+                    "status": "PASS",
+                    "message": f"{cpu_count} CPU cores, {round(memory.total / (1024**3), 1)}GB RAM"
+                }
+            else:
+                test_results["tests"]["system_resources"] = {"status": "WARNING", "message": "psutil not available"}
         except Exception as e:
             test_results["tests"]["system_resources"] = {"status": "FAIL", "message": str(e)}
 
         # Test 5: Health monitoring
         try:
             # Check if health monitor is working by looking for recent health data
-            from nvidia_orchestrator.storage.postgres_store import PostgresStore
             store = PostgresStore()
             if store.enabled:
                 recent_health = store.list_recent_health(limit=5)
@@ -191,48 +194,47 @@ def test_integration():
 def get_system_resources():
     """Returns available system resources for scaling decisions"""
     try:
-        import psutil
+        if psutil:
+            # Get system resource information
+            cpu_count = psutil.cpu_count()
+            cpu_percent = psutil.cpu_percent(interval=1)
+            memory = psutil.virtual_memory()
+            disk = psutil.disk_usage('/')
 
-        # Get system resource information
-        cpu_count = psutil.cpu_count()
-        cpu_percent = psutil.cpu_percent(interval=1)
-        memory = psutil.virtual_memory()
-        disk = psutil.disk_usage('/')
+            # Get Docker container resource usage
+            docker_usage = manager.get_system_resource_usage()
 
-        # Get Docker container resource usage
-        docker_usage = manager.get_system_resource_usage()
-
-        return {
-            "system": {
-                "cpu": {
-                    "total_cores": cpu_count,
-                    "current_usage_percent": round(cpu_percent, 2),
-                    "available_cores": max(0, cpu_count - (cpu_count * cpu_percent / 100))
+            return {
+                "system": {
+                    "cpu": {
+                        "total_cores": cpu_count,
+                        "current_usage_percent": round(cpu_percent, 2),
+                        "available_cores": max(0, cpu_count - (cpu_count * cpu_percent / 100))
+                    },
+                    "memory": {
+                        "total_gb": round(memory.total / (1024**3), 2),
+                        "available_gb": round(memory.available / (1024**3), 2),
+                        "usage_percent": round(memory.percent, 2)
+                    },
+                    "disk": {
+                        "total_gb": round(disk.total / (1024**3), 2),
+                        "free_gb": round(disk.free / (1024**3), 2),
+                        "usage_percent": round((disk.used / disk.total) * 100, 2)
+                    }
                 },
-                "memory": {
-                    "total_gb": round(memory.total / (1024**3), 2),
-                    "available_gb": round(memory.available / (1024**3), 2),
-                    "usage_percent": round(memory.percent, 2)
+                "docker": docker_usage
+            }
+        else:
+            # psutil not available, return basic info
+            return {
+                "system": {
+                    "cpu": {"total_cores": "unknown", "current_usage_percent": "unknown"},
+                    "memory": {"total_gb": "unknown", "available_gb": "unknown"},
+                    "disk": {"total_gb": "unknown", "free_gb": "unknown"}
                 },
-                "disk": {
-                    "total_gb": round(disk.total / (1024**3), 2),
-                    "free_gb": round(disk.free / (1024**3), 2),
-                    "usage_percent": round((disk.used / disk.total) * 100, 2)
-                }
-            },
-            "docker": docker_usage
-        }
-    except ImportError:
-        # psutil not available, return basic info
-        return {
-            "system": {
-                "cpu": {"total_cores": "unknown", "current_usage_percent": "unknown"},
-                "memory": {"total_gb": "unknown", "available_gb": "unknown"},
-                "disk": {"total_gb": "unknown", "free_gb": "unknown"}
-            },
-            "docker": manager.get_system_resource_usage(),
-            "note": "psutil not available - limited system metrics"
-        }
+                "docker": manager.get_system_resource_usage(),
+                "note": "psutil not available - limited system metrics"
+            }
     except Exception as e:
         logger.error(f"Failed to get system resources: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve system resources: {str(e)}")
@@ -299,51 +301,50 @@ async def validate_startup() -> Dict[str, Any]:
     # Check Docker connection
     try:
         manager.client.ping()
-        logger.info("✅ Docker connection validated")
+        logger.info("[OK] Docker connection validated")
     except Exception as e:
         validation["success"] = False
         validation["errors"].append(f"Docker connection failed: {e}")
-        logger.error(f"❌ Docker connection failed: {e}")
+        logger.error(f"[FAIL] Docker connection failed: {e}")
 
     # Check PostgreSQL connection
     try:
-        from nvidia_orchestrator.storage.postgres_store import PostgresStore
         store = PostgresStore()
         if store.enabled:
-            logger.info("✅ PostgreSQL connection validated")
+            logger.info("[OK] PostgreSQL connection validated")
         else:
             validation["warnings"].append("PostgreSQL disabled - events will not be persisted")
-            logger.warning("⚠️ PostgreSQL disabled - events will not be persisted")
+            logger.warning("[WARN] PostgreSQL disabled - events will not be persisted")
     except Exception as e:
         validation["warnings"].append(f"PostgreSQL check failed: {e}")
-        logger.warning(f"⚠️ PostgreSQL check failed: {e}")
+        logger.warning(f"[WARN] PostgreSQL check failed: {e}")
 
     # Check container manager
     try:
         managed_containers = manager.list_managed_containers()
-        logger.info(f"✅ Container manager validated - managing {len(managed_containers)} containers")
+        logger.info(f"[OK] Container manager validated - managing {len(managed_containers)} containers")
     except Exception as e:
         validation["success"] = False
         validation["errors"].append(f"Container manager failed: {e}")
-        logger.error(f"❌ Container manager failed: {e}")
+        logger.error(f"[FAIL] Container manager failed: {e}")
 
     # Check system resources
     try:
-        import psutil
-        cpu_count = psutil.cpu_count()
-        memory = psutil.virtual_memory()
-        logger.info(f"✅ System resources validated - {cpu_count} CPU cores, {round(memory.total / (1024**3), 1)}GB RAM")
-    except ImportError:
-        validation["warnings"].append("psutil not available - limited system metrics")
-        logger.warning("⚠️ psutil not available - limited system metrics")
+        if psutil:
+            cpu_count = psutil.cpu_count()
+            memory = psutil.virtual_memory()
+            logger.info(f"[OK] System resources validated - {cpu_count} CPU cores, {round(memory.total / (1024**3), 1)}GB RAM")
+        else:
+            validation["warnings"].append("psutil not available - limited system metrics")
+            logger.warning("[WARN] psutil not available - limited system metrics")
     except Exception as e:
         validation["warnings"].append(f"System resource check failed: {e}")
-        logger.warning(f"⚠️ System resource check failed: {e}")
+        logger.warning(f"[WARN] System resource check failed: {e}")
 
     if validation["success"]:
-        logger.info("🎉 All critical components validated successfully!")
+        logger.info("[SUCCESS] All critical components validated successfully!")
     else:
-        logger.error(f"🚨 Startup validation failed with {len(validation['errors'])} errors")
+        logger.error(f"[ERROR] Startup validation failed with {len(validation['errors'])} errors")
 
     return validation
 
@@ -542,7 +543,6 @@ def get_images():
     """Returns current desired state and running container counts from PostgresStore"""
     try:
         # Import PostgresStore here to avoid circular imports
-        from nvidia_orchestrator.storage.postgres_store import PostgresStore
         store = PostgresStore()
 
         if store.enabled:

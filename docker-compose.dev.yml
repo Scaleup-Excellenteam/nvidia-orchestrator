@@ -1,4 +1,3 @@
-version: '3.8'
 
 # Development configuration for NVIDIA Orchestrator
 # Usage: docker-compose -f docker-compose.dev.yml up

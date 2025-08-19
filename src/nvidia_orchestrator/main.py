@@ -11,13 +11,20 @@ import multiprocessing
 import signal
 import sys
 
+import uvicorn
+
+from nvidia_orchestrator.api.app import app
+from nvidia_orchestrator.core.container_manager import ContainerManager
+from nvidia_orchestrator.monitoring.health_monitor import (
+    run_forever,
+    sample_once,
+)
+from nvidia_orchestrator.storage.postgres_store import PostgresStore
+from nvidia_orchestrator.utils.logger import logger
+
 
 def run_api_server() -> None:
     """Run the API server in a separate process."""
-    import uvicorn
-
-    from nvidia_orchestrator.api.app import app
-    from nvidia_orchestrator.utils.logger import logger
 
     logger.info("Starting API server on port 8000...")
     uvicorn.run(
@@ -31,9 +38,6 @@ def run_api_server() -> None:
 
 def run_health_monitor() -> None:
     """Run the health monitor in a separate process."""
-    from nvidia_orchestrator.monitoring.health_monitor import run_forever
-    from nvidia_orchestrator.utils.logger import logger
-
     logger.info("Starting health monitor...")
     run_forever()
 
@@ -45,7 +49,6 @@ def run() -> None:
     This function starts both components in separate processes and handles
     graceful shutdown on SIGINT/SIGTERM.
     """
-    from nvidia_orchestrator.utils.logger import logger
 
     logger.info("Starting NVIDIA Orchestrator...")
 
@@ -103,11 +106,6 @@ async def run_async() -> None:
     This is an alternative implementation using asyncio for environments
     that prefer async/await patterns.
     """
-    import uvicorn
-
-    from nvidia_orchestrator.api.app import app
-    from nvidia_orchestrator.utils.logger import logger
-
     logger.info("Starting NVIDIA Orchestrator (async mode)...")
 
     # Create tasks for both components
@@ -123,10 +121,13 @@ async def run_async() -> None:
         await server.serve()
 
     async def run_monitor():
-        from nvidia_orchestrator.monitoring.health_monitor import sample_once
+
+        manager = ContainerManager()
+        store = PostgresStore()
+
         while True:
             try:
-                sample_once()
+                sample_once(manager, store)
                 await asyncio.sleep(60)  # Default interval
             except Exception as e:
                 logger.error(f"Health monitor error: {e}")
