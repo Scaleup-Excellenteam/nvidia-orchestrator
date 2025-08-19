@@ -269,21 +269,27 @@ async def do_register():
         logger.info("[registry] skipped: REGISTRY_URL not set")
         return
 
+    # Build the health URL for registration
+    health_url = f"http://{PUBLIC_HOST}:{PUBLIC_PORT}{HEALTH_PATH}"
+    
     payload = {
         "id": "orchestrator-1",
         "kind": "orchestrator",
-        "url": HEALTH_PATH,
-        "status":"UP"
+        "url": health_url,
+        "status": "UP"
     }
     headers = {"Content-Type": "application/json"}
     if REGISTRY_API_KEY:
         headers["Authorization"] = f"Bearer {REGISTRY_API_KEY}"
 
+    # Use the correct endpoint: /registry/parts
+    registry_endpoint = f"{REGISTRY_URL.rstrip('/')}/registry/parts"
+    
     for i in range(5):
         try:
-            r = httpx.post(REGISTRY_URL, json=payload, headers=headers, timeout=5)
+            r = httpx.post(registry_endpoint, json=payload, headers=headers, timeout=5)
             if r.status_code == 200 or r.status_code == 201:
-                logger.info("[registry] registered OK")
+                logger.info(f"[registry] registered OK to {registry_endpoint}")
                 return
             else:
                 logger.warning(f"[registry] failed ({r.status_code}): {r.text}")

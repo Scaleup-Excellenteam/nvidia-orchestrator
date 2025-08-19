@@ -34,6 +34,9 @@ services:
       HEALTH_RETENTION_DAYS: "7"
       PYTHONPATH: /app/src
       PYTHONUNBUFFERED: "1"
+      REGISTRY_URL: "http://localhost:7000"
+      PUBLIC_HOST: "localhost"
+      PUBLIC_PORT: "8000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./logs:/app/logs

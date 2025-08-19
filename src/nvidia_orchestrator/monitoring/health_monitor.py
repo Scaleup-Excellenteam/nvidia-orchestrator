@@ -134,8 +134,11 @@ async def register_container_to_discovery(container_info: dict, registry_url: st
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
 
+        # Use the correct endpoint: /registry/endpoints
+        registry_endpoint = f"{registry_url.rstrip('/')}/registry/endpoints"
+        
         async with httpx.AsyncClient() as client:
-            response = await client.post(registry_url, json=payload, headers=headers, timeout=5.0)
+            response = await client.post(registry_endpoint, json=payload, headers=headers, timeout=5.0)
             if response.status_code in (200, 201):
                 logger.info(f"Registered container {container_name} ({container_id}) to service discovery")
                 return True
